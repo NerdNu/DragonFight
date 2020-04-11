@@ -1,0 +1,48 @@
+name: ${project.name}
+version: ${project.version}
+author: totemo
+authors: []
+description: ${project.description}
+website: ${project.url}
+main: nu.nerd.df.DragonFight
+api-version: 1.15
+depend: [BeastMaster]
+
+permissions:
+  dragonfight.console:
+    description: Permission to use admininstrative commands that require console access.
+    default: op
+
+  dragonfight.admin:
+    description: Permission to administer fights.
+    default: op
+
+  dragonfight.user:
+    description: Permission to administer fights.
+    default: true
+
+commands:
+  dragonfight:
+    description: ${project.name} administrative command.
+    permission: dragonfight.console
+    usage: |
+
+      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
+      §e/<command> reload§f - Reload the configuration.
+
+  df:
+    description: ${project.name} administrative command.
+    permission: dragonfight.admin
+    usage: |
+
+      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
+      §e/<command> stop§f - Stop the current fight.
+
+  dragon:
+    description: ${project.name} player command.
+    permission: dragonfight.user
+    usage: |
+
+      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
+      §e/<command> ...§f - TBD. Stuff like showing your high score.
+
