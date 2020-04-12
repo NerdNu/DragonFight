@@ -125,6 +125,7 @@ public class FightState implements Listener {
             debug("Loaded crystal: "
                   + entity.getUniqueId()
                   + (entity.getScoreboardTags().contains(CRYSTAL_TAG) ? " (in the fight)" : ""));
+            _crystals.add((EnderCrystal) entity);
         }
     }
 
@@ -244,7 +245,6 @@ public class FightState implements Listener {
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
-
         Location bossSpawnLocation = getBossSpawnLocation();
         debug("Boss spawn location: " + Util.formatLocation(bossSpawnLocation));
 
@@ -254,13 +254,26 @@ public class FightState implements Listener {
             replacedCrystal.setBeamTarget(bossSpawnLocation);
         }, 5);
 
-        // Give the boss spawning beam some sounds.
-        for (int i = 10; i < STAGE_START_DELAY - 30; i += 10) {
-            playSound(bossSpawnLocation, Sound.BLOCK_BEACON_AMBIENT);
+        // Schedule random flickering of the crystal.
+        int totalFlickerTicks = 0;
+        while (totalFlickerTicks < STAGE_START_DELAY * 60 / 100) {
+            int flickerTicks = Util.random(1, 5);
+            totalFlickerTicks += flickerTicks;
+            Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
+                playSound(bossSpawnLocation, Sound.BLOCK_BELL_RESONATE);
+                replacedCrystal.setGlowing(!replacedCrystal.isGlowing());
+            }, totalFlickerTicks);
         }
+
+        // End with the replaced crystal not glowing.
+        Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
+            replacedCrystal.setGlowing(false);
+        }, totalFlickerTicks + 5);
+
+        // Give the boss a spawn sound.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             playSound(bossSpawnLocation, Sound.BLOCK_BEACON_ACTIVATE);
-        }, STAGE_START_DELAY - 20);
+        }, STAGE_START_DELAY * 80 / 100);
 
         // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
@@ -386,7 +399,7 @@ public class FightState implements Listener {
     /**
      * Number of ticks to wait before starting the next stage.
      */
-    private static long STAGE_START_DELAY = 100;
+    private static int STAGE_START_DELAY = 150;
 
     /**
      * The approximate radius of the circle of pillars.
