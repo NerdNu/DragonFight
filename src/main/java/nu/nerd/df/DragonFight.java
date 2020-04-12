@@ -1,7 +1,11 @@
 package nu.nerd.df;
 
 import org.bukkit.Bukkit;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import nu.nerd.beastmaster.commands.ExecutorBase;
+import nu.nerd.df.commands.DFExecutor;
 
 // ----------------------------------------------------------------------------
 /**
@@ -26,8 +30,10 @@ public class DragonFight extends JavaPlugin {
     @Override
     public void onEnable() {
         PLUGIN = this;
-
         saveDefaultConfig();
+
+        addCommandExecutor(new DFExecutor());
+
         Bukkit.getPluginManager().registerEvents(FIGHT, this);
         FIGHT.onEnable();
     }
@@ -41,4 +47,15 @@ public class DragonFight extends JavaPlugin {
         FIGHT.onDisable();
     }
 
+    // ------------------------------------------------------------------------
+    /**
+     * Add the specified CommandExecutor and set it as its own TabCompleter.
+     * 
+     * @param executor the CommandExecutor.
+     */
+    protected void addCommandExecutor(ExecutorBase executor) {
+        PluginCommand command = getCommand(executor.getName());
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
+    }
 } // class DragonFight

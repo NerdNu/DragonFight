@@ -13,19 +13,24 @@ import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.boss.DragonBattle.RespawnPhase;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.projectiles.ProjectileSource;
 
+import net.md_5.bungee.api.ChatColor;
 import nu.nerd.beastmaster.Util;
 
 // ----------------------------------------------------------------------------
@@ -47,6 +52,43 @@ public class FightState implements Listener {
      */
     public void onDisable() {
         Bukkit.getScheduler().cancelTasks(DragonFight.PLUGIN);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Stop the current fight and clean up mobs.
+     * 
+     * @param sender the command sender, for messages.
+     */
+    public void stop(CommandSender sender) {
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        EnderDragon dragon = battle.getEnderDragon();
+        if (dragon != null) {
+            // Hacky, but works.
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "execute in minecraft:the_end run kill @e[type=minecraft:ender_dragon]");
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Removed the dragon.");
+        }
+
+        for (EnderCrystal crystal : _crystals) {
+            crystal.remove();
+        }
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + _crystals.size());
+        _crystals.clear();
+
+        int projectileCount = 0;
+        int mobCount = 0;
+        for (Entity entity : fightWorld.getEntities()) {
+            if (entity.isValid() && entity.getScoreboardTags().contains(ENTITY_TAG)) {
+                entity.remove();
+                if (entity instanceof Projectile) {
+                    ++projectileCount;
+                } else {
+                    ++mobCount;
+                }
+            }
+        }
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + projectileCount + ", mobs: " + mobCount);
     }
 
     // ------------------------------------------------------------------------
@@ -147,6 +189,8 @@ public class FightState implements Listener {
 
         Entity entity = event.getEntity();
         if (entity instanceof EnderDragon) {
+            // Tag dragon as fight entity so its projectiles inherit that tag.
+            entity.getScoreboardTags().add(ENTITY_TAG);
             onDragonSpawn((EnderDragon) entity);
         }
 
@@ -158,6 +202,21 @@ public class FightState implements Listener {
         if (entity instanceof EnderCrystal) {
             onCrystalSpawn((EnderCrystal) entity);
         }
+    }
+
+    // ------------------------------------------------------------------------
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    protected void onProjectileLaunch(ProjectileLaunchEvent event) {
+        Projectile projectile = event.getEntity();
+        ProjectileSource shooter = projectile.getShooter();
+        if (shooter instanceof Entity) {
+            Entity shooterEntity = (Entity) shooter;
+            if (shooterEntity.getScoreboardTags().contains(ENTITY_TAG)) {
+
+            }
+        }
+        projectile.getScoreboardTags().add(ENTITY_TAG);
     }
 
     // ------------------------------------------------------------------------
@@ -284,6 +343,7 @@ public class FightState implements Listener {
             replacedCrystal.remove();
 
             // TODO: spawn mob per df-stage1-boss.
+            // TODO: tag boss with BOSS_TAG
             playSound(bossSpawnLocation, Sound.BLOCK_END_PORTAL_SPAWN);
 
             // TODO: use Stage class.
@@ -395,6 +455,18 @@ public class FightState implements Listener {
      * fight on restart.
      */
     private static final String CRYSTAL_TAG = "DF-crystal";
+
+    /**
+     * Tag applied to any entity spawned by the dragon fight: bosses, their
+     * support mobs and launched projectiles, with the exception of the dragon
+     * and crystals.
+     */
+    private static final String ENTITY_TAG = "DF-entity";
+
+    /**
+     * Tag applied only to summoned boss mobs on spawn.
+     */
+    private static final String BOSS_TAG = "DF-boss";
 
     /**
      * Number of ticks to wait before starting the next stage.
