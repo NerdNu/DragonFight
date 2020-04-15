@@ -416,8 +416,6 @@ public class FightState implements Listener {
             // TODO: move tagging into the tracker.
             // TODO: Let the mob type define the group tags.
 
-            playSound(bossSpawnLocation, Sound.BLOCK_END_PORTAL_SPAWN);
-
             // Show the title.
             List<Player> nearby = getNearbyPlayers();
             debug(nearby.size() + " players nearby.");
