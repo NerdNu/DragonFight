@@ -18,6 +18,7 @@ import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -25,12 +26,16 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.projectiles.ProjectileSource;
 
 import net.md_5.bungee.api.ChatColor;
+import nu.nerd.beastmaster.BeastMaster;
+import nu.nerd.beastmaster.DropResults;
+import nu.nerd.beastmaster.DropSet;
 import nu.nerd.beastmaster.Util;
 
 // ----------------------------------------------------------------------------
@@ -44,6 +49,21 @@ public class FightState implements Listener {
      */
     public void onEnable() {
         findEndCrystals();
+
+        boolean addedDropSet = false;
+        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+            _stages[stageNumber - 1] = new Stage(stageNumber);
+
+            // Add the stage N boss mob loot tables, if not defined.
+            String dropSetId = Stage.getDropSetId(stageNumber);
+            if (BeastMaster.LOOTS.getDropSet(dropSetId) == null) {
+                BeastMaster.LOOTS.addDropSet(new DropSet(dropSetId));
+                addedDropSet = true;
+            }
+        }
+        if (addedDropSet) {
+            BeastMaster.CONFIG.save();
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -89,6 +109,7 @@ public class FightState implements Listener {
             }
         }
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + projectileCount + ", mobs: " + mobCount);
+        _stageNumber = 0;
     }
 
     // ------------------------------------------------------------------------
@@ -97,7 +118,7 @@ public class FightState implements Listener {
      * 
      * @param message the message.
      */
-    public void debug(String message) {
+    public static void debug(String message) {
         DragonFight.PLUGIN.getLogger().info(message);
     }
 
@@ -155,8 +176,8 @@ public class FightState implements Listener {
     /**
      * Find the ender crystals that are part of the current dragon fight.
      * 
-     * Finding these in ChunkLoadEvent because there is no event for spawn
-     * chunks.
+     * There is no ChunkLoadEvent for spawn chunks, so we need to scan loaded
+     * chunks on startup.
      */
     protected void findEndCrystals() {
         World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
@@ -205,18 +226,51 @@ public class FightState implements Listener {
     }
 
     // ------------------------------------------------------------------------
-
+    /**
+     * When a projectile is launched, set up to track it as an entity associated
+     * with the Dragon Fight so we can easily clean it up later.
+     */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     protected void onProjectileLaunch(ProjectileLaunchEvent event) {
         Projectile projectile = event.getEntity();
         ProjectileSource shooter = projectile.getShooter();
         if (shooter instanceof Entity) {
             Entity shooterEntity = (Entity) shooter;
+            // TODO: move into a tracker class.
             if (shooterEntity.getScoreboardTags().contains(ENTITY_TAG)) {
-
+                projectile.getScoreboardTags().add(ENTITY_TAG);
             }
         }
-        projectile.getScoreboardTags().add(ENTITY_TAG);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * When a stage is cleared of all its boss mobs, spawn the next stage.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    protected void onEntityDeath(EntityDeathEvent event) {
+        if (!isFightWorld(event.getEntity().getWorld())) {
+            return;
+        }
+
+        if (event.getEntityType() == EntityType.ENDER_DRAGON) {
+            // TODO: df-dragon-drops custom handling.
+            // TODO: clean up associated entities?
+            _stageNumber = 0;
+            return;
+        }
+
+        if (event.getEntity().getScoreboardTags().contains(BOSS_TAG)) {
+            // TODO: update the stage boss bar.
+            // TODO: consult the tracker rather than assuming there is only a
+            // single boss.
+            if (_stageNumber == 10) {
+                // Just the dragon in stage 11.
+                _stageNumber = 11;
+            } else {
+                nextStage();
+            }
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -277,6 +331,7 @@ public class FightState implements Listener {
 
         crystal.getScoreboardTags().add(CRYSTAL_TAG);
         crystal.setGlowing(true);
+        crystal.setInvulnerable(true);
         playSound(loc, Sound.BLOCK_BEACON_POWER_SELECT);
         loc.getWorld().strikeLightningEffect(loc);
     }
@@ -300,6 +355,9 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Start the next stage.
+     * 
+     * This method is called to do the boss spawning sequence for stages 1 to
+     * 10.
      */
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
@@ -310,7 +368,8 @@ public class FightState implements Listener {
         // Point the end crystal beam at the spawn location.
         // Needs to be delayed slightly after the dragon spawn.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
-            replacedCrystal.setBeamTarget(bossSpawnLocation);
+            Location beamTarget = bossSpawnLocation.clone().add(0, -2.5, 0);
+            replacedCrystal.setBeamTarget(beamTarget);
         }, 5);
 
         // Schedule random flickering of the crystal.
@@ -336,40 +395,55 @@ public class FightState implements Listener {
 
         // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
+            Stage stage = _stages[_stageNumber];
             ++_stageNumber;
+
+            // Despawn the crystal that becomes the boss.
             _crystals.remove(replacedCrystal);
 
             // Remove entity, spawn boss and play effects.
             replacedCrystal.remove();
 
-            // TODO: spawn mob per df-stage1-boss.
-            // TODO: tag boss with BOSS_TAG
+            // Spawn boss or bosses and set up for tracking.
+            DropResults bosses = new DropResults();
+            DropSet dropSet = stage.getDropSet();
+            dropSet.generateRandomDrops(bosses, "DragonFight stage " + stage, null, bossSpawnLocation);
+            for (LivingEntity mob : bosses.getMobs()) {
+                mob.getScoreboardTags().add(ENTITY_TAG);
+                mob.getScoreboardTags().add(BOSS_TAG);
+            }
+
+            // TODO: move tagging into the tracker.
+            // TODO: Let the mob type define the group tags.
+
             playSound(bossSpawnLocation, Sound.BLOCK_END_PORTAL_SPAWN);
 
-            // TODO: use Stage class.
+            // Show the title.
             List<Player> nearby = getNearbyPlayers();
             debug(nearby.size() + " players nearby.");
-            nearby.stream().forEach(p -> p.sendTitle("Stage 1", "It begins...", 10, 70, 20));
+            stage.announce(nearby);
         }, STAGE_START_DELAY);
     }
 
     // ------------------------------------------------------------------------
     /**
      * Return true if the 3x3x3 blocks centred horizontally on the specified
-     * location, with the location in the bottom row of the three, are air.
+     * location, with the location in the bottom row of the three, are passable
+     * or low standing (currently only carpet).
      * 
      * @param loc the location of the middle, bottom row of the 3x3x3 box to
      *        check.
      * @return true if it's air.
      */
-    protected boolean isAir3x3x3(Location loc) {
+    protected boolean isPassable3x3x3(Location loc) {
         // Check for 3x3x3 air.
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dz = -1; dz <= 1; ++dz) {
                 // Offset up for undulating terrain.
                 for (int dy = 0; dy <= 2; ++dy) {
-                    Location check = loc.clone().add(dx, dy, dz);
-                    if (check.getBlock().getType() != Material.AIR) {
+                    Location checkLoc = loc.clone().add(dx, dy, dz);
+                    Block checkBlock = checkLoc.getBlock();
+                    if (!checkBlock.isPassable()) {
                         return false;
                     }
                 }
@@ -400,15 +474,15 @@ public class FightState implements Listener {
         Location loc = null;
         for (int i = 5; i >= -5; --i) {
             loc = startLoc.clone().add(0, i, 0);
-            if (loc.getBlock().getType() != Material.AIR) {
+            if (!loc.getBlock().isPassable()) {
                 break;
             }
         }
 
-        // Now go up to find air.
+        // Now go up to find space.
         for (int i = 1; i < 10; ++i) {
             loc.add(0, 1, 0);
-            if (isAir3x3x3(loc)) {
+            if (isPassable3x3x3(loc)) {
                 return loc;
             }
         }
@@ -511,7 +585,15 @@ public class FightState implements Listener {
      * Current stage number.
      * 
      * Stage 0 is before the fight, Stage 1 => first crystal removed and boss
-     * spawned. Stage 10 => final boss spawned.
+     * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
      */
     protected int _stageNumber;
+
+    /**
+     * Array of 10 {@link Stage}s.
+     * 
+     * Stage N is at index N-1.
+     */
+    protected Stage[] _stages = new Stage[10];
+
 } // class FightState
