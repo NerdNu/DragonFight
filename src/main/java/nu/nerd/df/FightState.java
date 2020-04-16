@@ -425,33 +425,6 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Return true if the 3x3x3 blocks centred horizontally on the specified
-     * location, with the location in the bottom row of the three, are passable
-     * or low standing (currently only carpet).
-     * 
-     * @param loc the location of the middle, bottom row of the 3x3x3 box to
-     *        check.
-     * @return true if it's air.
-     */
-    protected boolean isPassable3x3x3(Location loc) {
-        // Check for 3x3x3 air.
-        for (int dx = -1; dx <= 1; ++dx) {
-            for (int dz = -1; dz <= 1; ++dz) {
-                // Offset up for undulating terrain.
-                for (int dy = 0; dy <= 2; ++dy) {
-                    Location checkLoc = loc.clone().add(dx, dy, dz);
-                    Block checkBlock = checkLoc.getBlock();
-                    if (!checkBlock.isPassable()) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
-    // ------------------------------------------------------------------------
-    /**
      * Choose a random location to spawn the boss with a 3x3x3 volume of air.
      * 
      * If a suitable location cannot be found, put it on the portal pillar.
@@ -480,7 +453,7 @@ public class FightState implements Listener {
         // Now go up to find space.
         for (int i = 1; i < 10; ++i) {
             loc.add(0, 1, 0);
-            if (isPassable3x3x3(loc)) {
+            if (Util.isPassable3x3x3(loc)) {
                 return loc;
             }
         }
