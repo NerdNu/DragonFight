@@ -15,6 +15,8 @@ import org.bukkit.block.Block;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.boss.DragonBattle.RespawnPhase;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
@@ -30,13 +32,21 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
 
 import net.md_5.bungee.api.ChatColor;
 import nu.nerd.beastmaster.BeastMaster;
+import nu.nerd.beastmaster.Drop;
 import nu.nerd.beastmaster.DropResults;
 import nu.nerd.beastmaster.DropSet;
+import nu.nerd.beastmaster.DropType;
+import nu.nerd.beastmaster.PotionSet;
+import nu.nerd.beastmaster.ProbablePotion;
 import nu.nerd.beastmaster.Util;
+import nu.nerd.beastmaster.mobs.DataType;
 import nu.nerd.beastmaster.mobs.MobType;
 
 // ----------------------------------------------------------------------------
@@ -50,21 +60,7 @@ public class FightState implements Listener {
      */
     public void onEnable() {
         findEndCrystals();
-
-        boolean addedDropSet = false;
-        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
-            _stages[stageNumber - 1] = new Stage(stageNumber);
-
-            // Add the stage N boss mob loot tables, if not defined.
-            String dropSetId = Stage.getDropSetId(stageNumber);
-            if (BeastMaster.LOOTS.getDropSet(dropSetId) == null) {
-                BeastMaster.LOOTS.addDropSet(new DropSet(dropSetId));
-                addedDropSet = true;
-            }
-        }
-        if (addedDropSet) {
-            BeastMaster.CONFIG.save();
-        }
+        defineBeastMasterObjects();
     }
 
     // ------------------------------------------------------------------------
@@ -219,6 +215,126 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Create default definitions for BeastMaster objects.
+     */
+    protected void defineBeastMasterObjects() {
+        boolean configurationChanged = false;
+
+        // Default items.
+        if (BeastMaster.ITEMS.getItem("df-elytra") == null) {
+            BeastMaster.ITEMS.addItem("df-elytra", new ItemStack(Material.ELYTRA));
+            configurationChanged = true;
+        }
+        if (BeastMaster.ITEMS.getItem("df-dragon-head") == null) {
+            BeastMaster.ITEMS.addItem("df-dragon-head", new ItemStack(Material.DRAGON_HEAD));
+            configurationChanged = true;
+        }
+        if (BeastMaster.ITEMS.getItem("df-placeholder-head") == null) {
+            String skullData = "item:\n" +
+                               "  ==: org.bukkit.inventory.ItemStack\n" +
+                               "  v: 2230\n" +
+                               "  type: PLAYER_HEAD\n" +
+                               "  meta:\n" +
+                               "    ==: ItemMeta\n" +
+                               "    meta-type: SKULL\n" +
+                               "    display-name: 'TODO: add texture'\n" +
+                               "    internal: H4sIAAAAAAAAAE2KzW6CQBhFvzZpQkkfo1uSAQRk0YUpRIfIUJHf2Y0wRKaDNQhWfK4+YOmui5vcc89VAVR42X+OUn70X00ruQrq3M68H1p+eQZl4Ldh7PlFBYAHBZ4yJkcOP3wKEC2OqC4CWU3YnjnZIxlhcXbwKZsO79jG3ew3K3s7uf++1sByS5ZmcKSn3XjoMrQ1Y8k3sV516ZUktYgSH4WJr0dedS/vuxtNQoMI2c6R1MPfYecbVKwmIlKTisqg63Si69IIRSzLPF0QLxPE+9tSneSZCNvAbQr0BqDAI67hlTmmzh2r0pyGWdqC1ba2rF1XQ1W9ZDZzddsxAH4BxCeVXBwBAAA=\n";
+            ItemStack dfPlaceholderHead = null;
+            try {
+                YamlConfiguration config = new YamlConfiguration();
+                config.loadFromString(skullData);
+                dfPlaceholderHead = config.getItemStack("item");
+            } catch (InvalidConfigurationException ex) {
+                DragonFight.PLUGIN.getLogger().warning("Unable to load df-placeholder-head.");
+            }
+            if (dfPlaceholderHead != null) {
+                BeastMaster.ITEMS.addItem("df-placeholder-head", dfPlaceholderHead);
+            }
+            configurationChanged = true;
+        }
+
+        // Default potion sets.
+        if (BeastMaster.POTIONS.getPotionSet("df-boss-potions") == null) {
+            PotionSet dfBossPotions = new PotionSet("df-boss-potions");
+            PotionEffect potionEffect = new PotionEffect(PotionEffectType.FIRE_RESISTANCE, Integer.MAX_VALUE, 0, false, false);
+            dfBossPotions.addPotion(new ProbablePotion(potionEffect, 1.0));
+            BeastMaster.POTIONS.addPotionSet(dfBossPotions);
+            configurationChanged = true;
+        }
+
+        // Default mob types.
+        if (BeastMaster.MOBS.getMobType("df-support") == null) {
+            MobType dfSupport = new MobType("df-support", "skeleton");
+            dfSupport.getProperty("show-name-plate").setValue(true);
+            dfSupport.getProperty("pick-up-percent").setValue(0.0);
+            dfSupport.getProperty("helmet-drop-percent").setValue(0.0);
+            dfSupport.getProperty("chest-plate-drop-percent").setValue(0.0);
+            dfSupport.getProperty("leggings-drop-percent").setValue(0.0);
+            dfSupport.getProperty("boots-drop-percent").setValue(0.0);
+            dfSupport.getProperty("main-hand-drop-percent").setValue(0.0);
+            dfSupport.getProperty("drops").setValue("df-no-drops");
+            dfSupport.getProperty("can-despawn").setValue(false);
+            dfSupport.getProperty("groups").setValue(DataType.TAG_SET.deserialise("df-entity,df-support"));
+            dfSupport.getProperty("friend-groups").setValue(DataType.TAG_SET.deserialise("df-entity"));
+            BeastMaster.MOBS.addMobType(dfSupport);
+            configurationChanged = true;
+        }
+        if (BeastMaster.MOBS.getMobType("df-boss") == null) {
+            MobType dfBoss = new MobType("df-boss", "df-support");
+            dfBoss.getProperty("attack-damage").setValue(50.0);
+            dfBoss.getProperty("potion-buffs").setValue("df-boss-potions");
+            dfBoss.getProperty("health").setValue(300.0);
+            dfBoss.getProperty("groups").setValue(DataType.TAG_SET.deserialise("df-boss,df-entity"));
+            BeastMaster.MOBS.addMobType(dfBoss);
+            configurationChanged = true;
+        }
+        if (BeastMaster.MOBS.getMobType("df-placeholder-boss") == null) {
+            MobType dfPlaceholderBoss = new MobType("df-placeholder-boss", "df-boss");
+            dfPlaceholderBoss.getProperty("entity-type").setValue(EntityType.WITHER_SKELETON);
+            dfPlaceholderBoss.getProperty("name").setValue("Test Boss Pls Ignore");
+            dfPlaceholderBoss.getProperty("helmet").setValue("df-placeholder-head");
+            dfPlaceholderBoss.getProperty("main-hand").setValue("stone_sword");
+            BeastMaster.MOBS.addMobType(dfPlaceholderBoss);
+            configurationChanged = true;
+        }
+
+        // Default loot tables.
+        if (BeastMaster.LOOTS.getDropSet("df-dragon-drops") == null) {
+            DropSet dfDragonDrops = new DropSet("df-dragon-drops");
+            dfDragonDrops.addDrop(new Drop(DropType.ITEM, "df-elytra", 1.0, 1, 1));
+            dfDragonDrops.addDrop(new Drop(DropType.ITEM, "df-dragon-head", 1.0, 1, 1));
+            BeastMaster.LOOTS.addDropSet(dfDragonDrops);
+            configurationChanged = true;
+        }
+        if (BeastMaster.LOOTS.getDropSet("df-no-drops") == null) {
+            BeastMaster.LOOTS.addDropSet(new DropSet("df-no-drops"));
+            configurationChanged = true;
+        }
+
+        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+            _stages[stageNumber - 1] = new Stage(stageNumber);
+
+            // Add the stage N boss mob loot tables, if not defined.
+            String dropSetId = Stage.getDropSetId(stageNumber);
+            if (BeastMaster.LOOTS.getDropSet(dropSetId) == null) {
+                BeastMaster.LOOTS.addDropSet(new DropSet(dropSetId));
+                configurationChanged = true;
+            }
+            DropSet stageDropSet = BeastMaster.LOOTS.getDropSet(dropSetId);
+            if (stageDropSet.getAllDrops().isEmpty()) {
+                stageDropSet.addDrop(new Drop(DropType.MOB, "df-placeholder-boss", 1.0, 1, 1));
+                configurationChanged = true;
+            }
+        }
+
+        // Save if anything changed.
+        if (configurationChanged) {
+            BeastMaster.CONFIG.save();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * When the dragon spawns, handle it with
      * {@link #onDragonSpawn(EnderDragon)}.
      * 
@@ -291,7 +407,7 @@ public class FightState implements Listener {
         }
 
         // TODO: actually needs to wait until all stage bosses are dead.
-        if (hasTagOrGroup(event.getEntity(), BOSS_TAG)) {
+        if (_stageNumber != 0 && hasTagOrGroup(event.getEntity(), BOSS_TAG)) {
             // TODO: update the stage boss bar.
             // TODO: consult the tracker rather than assuming there is only a
             // single boss.
