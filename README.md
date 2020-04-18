@@ -53,7 +53,7 @@ the object entirely.
 
 > *All of the BeastMaster objects that configure DragonFight are given names with
 the prefix `df-` and it is recommended that any other BeastMaster objects you
-create also have this same prefix.*
+create for the dragon fight also have this same prefix.*
 
 
 ### Customisation - Built-In Loot Tables
@@ -130,6 +130,19 @@ with the `/beast-item redefine` command.
  * `df-dragon-head` is the dragon head dropped by the `df-dragon-drops` loot table.
  * `df-placeholder-head` is the custom head of the `df-placeholder-boss` mob,
    spawned by default in all unconfigured stages.
+
+
+## Mob Tracking
+
+To prevent mobs from wandering too far off, the DragonFight mob will teleport
+bosses to a random location within the circle between the obsidian pillars if
+they:
+
+ * go more than 100 blocks from the centre of the world,
+ * have not taken any damage in the last 60 seconds, in which case they've
+   probably teleported underground,
+ * go below Y0, in which case they are about to fall out of the world, or
+ * if the mob is about to use a portal.
 
 
 ## Commands
