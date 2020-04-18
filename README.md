@@ -99,6 +99,7 @@ following default properties set by the DragonFight plugin when first defined:
  * `leggings-drop-percent` 0.0
  * `boots-drop-percent` 0.0
  * `main-hand-drop-percent` 0.0
+ * `drops` df-nothing
  * `can-despawn` false
  * `groups` df-entity,df-support
  * `friend-groups` df-entity
@@ -111,6 +112,18 @@ plugin:
  * `potion-buffs` df-boss-potions
  * `health` 300.0
  * `groups` df-boss,df-entity
+
+The recommended way to define a new support mob type is to inherit from
+`df-support` and then set the `entity-type` property of the new mob type:
+
+    /beast-mob add df-my-creeper df-support
+    /beast-mob set df-my-creeper entity-type creeper
+
+The recommended way to define a new boss mob type is to inherit from
+`df-boss` and then set the `entity-type` property of the new mob type:
+
+    /beast-mob add df-evoker-boss df-boss
+    /beast-mob set df-evoker-boss entity-type evoker
 
 
 ### Customisation - Built-In Potion Sets
