@@ -18,7 +18,7 @@ public class DFExecutor extends ExecutorBase {
      * @param subcommands
      */
     public DFExecutor() {
-        super("df", "help", "stop");
+        super("df", "help", "stop", "next");
     }
 
     // ------------------------------------------------------------------------
@@ -34,6 +34,11 @@ public class DFExecutor extends ExecutorBase {
 
         if (args.length == 1 && args[0].equalsIgnoreCase("stop")) {
             DragonFight.FIGHT.stop(sender);
+            return true;
+        }
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("next")) {
+            DragonFight.FIGHT.nextStage(sender);
             return true;
         }
 

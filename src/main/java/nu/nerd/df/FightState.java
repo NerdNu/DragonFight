@@ -12,6 +12,7 @@ import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
+import org.bukkit.boss.BarFlag;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.boss.DragonBattle.RespawnPhase;
 import org.bukkit.command.CommandSender;
@@ -60,6 +61,7 @@ public class FightState implements Listener {
      */
     public void onEnable() {
         findEndCrystals();
+        debug("Detected stage: " + _stageNumber);
         defineBeastMasterObjects();
     }
 
@@ -90,7 +92,7 @@ public class FightState implements Listener {
         for (EnderCrystal crystal : _crystals) {
             crystal.remove();
         }
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + _crystals.size());
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
         _crystals.clear();
 
         int projectileCount = 0;
@@ -106,8 +108,56 @@ public class FightState implements Listener {
                 }
             }
         }
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + projectileCount + ", mobs: " + mobCount);
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed mobs: " + ChatColor.LIGHT_PURPLE + mobCount);
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + ChatColor.LIGHT_PURPLE + projectileCount);
         _stageNumber = 0;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Remove the current stage boss and fight-associated support mobs and
+     * projectiles, and skip to the next stage.
+     */
+    public void nextStage(CommandSender sender) {
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        if (battle.getEnderDragon() == null) {
+            sender.sendMessage(ChatColor.RED + "You need to spawn a dragon with end crystals first!");
+            return;
+        }
+        if (_stageNumber == 11) {
+            stop(sender);
+            return;
+        }
+
+        int projectileCount = 0;
+        int bossCount = 0;
+        int supportCount = 0;
+        for (Entity entity : fightWorld.getEntities()) {
+            if (entity.isValid()) {
+                if (entity instanceof Projectile && hasTagOrGroup(entity, ENTITY_TAG)) {
+                    entity.remove();
+                    ++projectileCount;
+                } else if (hasTagOrGroup(entity, BOSS_TAG)) {
+                    entity.remove();
+                    ++bossCount;
+                } else if (hasTagOrGroup(entity, SUPPORT_TAG)) {
+                    entity.remove();
+                    ++supportCount;
+                }
+            }
+        }
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed boss mobs: " + ChatColor.LIGHT_PURPLE + bossCount);
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed support mobs: " + ChatColor.LIGHT_PURPLE + supportCount);
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + ChatColor.LIGHT_PURPLE + projectileCount);
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Starting stage: " + ChatColor.LIGHT_PURPLE + (_stageNumber + 1));
+
+        // In stage 10, there are no more crystals to remove.
+        if (_stageNumber < 10) {
+            nextStage();
+        } else {
+            _stageNumber = 11;
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -210,6 +260,21 @@ public class FightState implements Listener {
             debug("Loaded crystal: " + entity.getUniqueId() +
                   (entity.getScoreboardTags().contains(CRYSTAL_TAG) ? " (in the fight)" : ""));
             _crystals.add((EnderCrystal) entity);
+        }
+
+        // Work out what stage we're in.
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        _stageNumber = (battle.getEnderDragon() == null) ? 0
+                                                         : 10 - _crystals.size();
+        if (_stageNumber == 10) {
+            // The difference between stage 10 and 11 is that in 11 there are no
+            // boss mobs.
+            for (Entity entity : fightWorld.getEntities()) {
+                if (entity.isValid() && hasTagOrGroup(entity, BOSS_TAG)) {
+                    return;
+                }
+            }
+            _stageNumber = 11;
         }
     }
 
@@ -357,7 +422,7 @@ public class FightState implements Listener {
         }
 
         DragonBattle battle = world.getEnderDragonBattle();
-        if (battle == null || battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
+        if (battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
             return;
         }
 
@@ -413,6 +478,7 @@ public class FightState implements Listener {
             // single boss.
             if (_stageNumber == 10) {
                 // Just the dragon in stage 11.
+                debug("Beginning stage 11.");
                 _stageNumber = 11;
             } else {
                 nextStage();
@@ -495,6 +561,13 @@ public class FightState implements Listener {
             debug("Dragon spawned but there were no ender crystals?!");
             return;
         }
+
+        // Let's have it so we can still see.
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        battle.getBossBar().removeFlag(BarFlag.DARKEN_SKY);
+        battle.getBossBar().removeFlag(BarFlag.CREATE_FOG);
+
         nextStage();
     }
 
@@ -508,33 +581,35 @@ public class FightState implements Listener {
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
-        Location bossSpawnLocation = getBossSpawnLocation();
-        debug("Boss spawn location: " + Util.formatLocation(bossSpawnLocation));
+        // debug("Boss spawn location: " +
+        // Util.formatLocation(bossSpawnLocation));
 
-        // Point the end crystal beam at the spawn location.
-        // Needs to be delayed slightly after the dragon spawn.
-        Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
-            Location beamTarget = bossSpawnLocation.clone().add(0, -2.5, 0);
-            replacedCrystal.setBeamTarget(beamTarget);
-        }, 5);
-
-        // Schedule random flickering of the crystal.
-        int totalFlickerTicks = 0;
+        // Schedule random flickering of the crystal and searching of the beam.
+        // Needs to be delayed slightly after the dragon spawn for beam to work.
+        int totalFlickerTicks = 5;
         while (totalFlickerTicks < STAGE_START_DELAY * 60 / 100) {
             int flickerTicks = Util.random(1, 5);
             totalFlickerTicks += flickerTicks;
             Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
-                playSound(bossSpawnLocation, Sound.BLOCK_BELL_RESONATE);
+                Location beamTarget = getBossSpawnLocation().add(0, -2.5, 0);
+                replacedCrystal.setBeamTarget(beamTarget);
                 replacedCrystal.setGlowing(!replacedCrystal.isGlowing());
+                playSound(beamTarget, Sound.BLOCK_BELL_RESONATE);
             }, totalFlickerTicks);
         }
 
+        // Choose final beam target and spawn location.
+        Location bossSpawnLocation = getBossSpawnLocation();
+
         // End with the replaced crystal not glowing.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
+            Location beamTarget = bossSpawnLocation.clone().add(0, -2.5, 0);
             replacedCrystal.setGlowing(false);
+            replacedCrystal.setBeamTarget(beamTarget);
+            playSound(beamTarget, Sound.BLOCK_BELL_RESONATE);
         }, totalFlickerTicks + 5);
 
-        // Give the boss a spawn sound.
+        // Give the boss a spawn sound and set final target position.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             playSound(bossSpawnLocation, Sound.BLOCK_BEACON_ACTIVATE);
         }, STAGE_START_DELAY * 80 / 100);
@@ -543,6 +618,7 @@ public class FightState implements Listener {
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             Stage stage = _stages[_stageNumber];
             ++_stageNumber;
+            debug("Beginning stage: " + _stageNumber);
 
             // Despawn the crystal that becomes the boss.
             _crystals.remove(replacedCrystal);
@@ -641,19 +717,24 @@ public class FightState implements Listener {
      * Tag applied to end crystals on spawn so we know which ones are in the
      * fight on restart.
      */
-    private static final String CRYSTAL_TAG = "DF-crystal";
+    private static final String CRYSTAL_TAG = "df-crystal";
 
     /**
      * Tag applied to any entity spawned by the dragon fight: bosses, their
      * support mobs and launched projectiles, with the exception of the dragon
      * and crystals.
      */
-    private static final String ENTITY_TAG = "DF-entity";
+    private static final String ENTITY_TAG = "df-entity";
 
     /**
-     * Tag applied only to summoned boss mobs on spawn.
+     * Group of summoned boss mobs on spawn.
      */
-    private static final String BOSS_TAG = "DF-boss";
+    private static final String BOSS_TAG = "df-boss";
+
+    /**
+     * Group of support mobs summoned by bosses.
+     */
+    private static final String SUPPORT_TAG = "df-support";
 
     /**
      * Number of ticks to wait before starting the next stage.
@@ -696,6 +777,8 @@ public class FightState implements Listener {
 
     /**
      * Current stage number.
+     * 
+     * in Stage N, N crystals have been removed.
      * 
      * Stage 0 is before the fight, Stage 1 => first crystal removed and boss
      * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
