@@ -2,6 +2,7 @@ package nu.nerd.df;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
@@ -18,7 +19,6 @@ import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -37,6 +37,7 @@ import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.DropResults;
 import nu.nerd.beastmaster.DropSet;
 import nu.nerd.beastmaster.Util;
+import nu.nerd.beastmaster.mobs.MobType;
 
 // ----------------------------------------------------------------------------
 /**
@@ -76,7 +77,7 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Stop the current fight and clean up mobs.
+     * Stop the current fight and clean up mobs and projectiles.
      * 
      * @param sender the command sender, for messages.
      */
@@ -99,11 +100,12 @@ public class FightState implements Listener {
         int projectileCount = 0;
         int mobCount = 0;
         for (Entity entity : fightWorld.getEntities()) {
-            if (entity.isValid() && entity.getScoreboardTags().contains(ENTITY_TAG)) {
+            if (entity.isValid() && hasTagOrGroup(entity, ENTITY_TAG)) {
                 entity.remove();
                 if (entity instanceof Projectile) {
                     ++projectileCount;
                 } else {
+                    // Note: Crystals are tagged CRYSTAL_TAG, not ENTITY_TAG.
                     ++mobCount;
                 }
             }
@@ -120,6 +122,30 @@ public class FightState implements Listener {
      */
     public static void debug(String message) {
         DragonFight.PLUGIN.getLogger().info(message);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return true if an entity has the specified scoreboard tag or BeastMaster
+     * group.
+     * 
+     * @param entity the entity.
+     * @param tag the tag or group to look for.
+     * @return true if the entity has the tag or group.
+     */
+    public static boolean hasTagOrGroup(Entity entity, String tag) {
+        if (entity.getScoreboardTags().contains(tag)) {
+            return true;
+        }
+
+        MobType mobType = BeastMaster.getMobType(entity);
+        if (mobType != null) {
+            @SuppressWarnings("unchecked")
+            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
+            return groups != null && groups.contains(tag);
+        }
+
+        return false;
     }
 
     // ------------------------------------------------------------------------
@@ -185,9 +211,8 @@ public class FightState implements Listener {
         Location origin = new Location(fightWorld, 0, 64, 0);
         for (Entity entity : fightWorld.getNearbyEntities(origin, radius, 64, radius,
                                                           e -> e.getType() == EntityType.ENDER_CRYSTAL)) {
-            debug("Loaded crystal: "
-                  + entity.getUniqueId()
-                  + (entity.getScoreboardTags().contains(CRYSTAL_TAG) ? " (in the fight)" : ""));
+            debug("Loaded crystal: " + entity.getUniqueId() +
+                  (entity.getScoreboardTags().contains(CRYSTAL_TAG) ? " (in the fight)" : ""));
             _crystals.add((EnderCrystal) entity);
         }
     }
@@ -227,17 +252,22 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * When a projectile is launched, set up to track it as an entity associated
-     * with the Dragon Fight so we can easily clean it up later.
+     * When a projectile is launched by a mob with the ENTITY_TAG tag or group,
+     * tag it with ENTITY_TAG so we can easily clean it up later.
+     * 
+     * The dragon is tagged thus so that its projectiles can also be removed.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     protected void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (!isFightWorld(event.getEntity().getWorld())) {
+            return;
+        }
+
         Projectile projectile = event.getEntity();
         ProjectileSource shooter = projectile.getShooter();
         if (shooter instanceof Entity) {
             Entity shooterEntity = (Entity) shooter;
-            // TODO: move into a tracker class.
-            if (shooterEntity.getScoreboardTags().contains(ENTITY_TAG)) {
+            if (hasTagOrGroup(shooterEntity, ENTITY_TAG)) {
                 projectile.getScoreboardTags().add(ENTITY_TAG);
             }
         }
@@ -260,7 +290,8 @@ public class FightState implements Listener {
             return;
         }
 
-        if (event.getEntity().getScoreboardTags().contains(BOSS_TAG)) {
+        // TODO: actually needs to wait until all stage bosses are dead.
+        if (hasTagOrGroup(event.getEntity(), BOSS_TAG)) {
             // TODO: update the stage boss bar.
             // TODO: consult the tracker rather than assuming there is only a
             // single boss.
@@ -325,9 +356,8 @@ public class FightState implements Listener {
         _crystals.add(crystal);
 
         Location loc = crystal.getLocation();
-        debug(crystal.getType()
-              + " " + crystal.getUniqueId()
-              + " spawned at " + Util.formatLocation(loc));
+        debug(crystal.getType() + " " + crystal.getUniqueId() +
+              " spawned at " + Util.formatLocation(loc));
 
         crystal.getScoreboardTags().add(CRYSTAL_TAG);
         crystal.setGlowing(true);
@@ -408,10 +438,6 @@ public class FightState implements Listener {
             DropResults bosses = new DropResults();
             DropSet dropSet = stage.getDropSet();
             dropSet.generateRandomDrops(bosses, "DragonFight stage " + stage, null, bossSpawnLocation);
-            for (LivingEntity mob : bosses.getMobs()) {
-                mob.getScoreboardTags().add(ENTITY_TAG);
-                mob.getScoreboardTags().add(BOSS_TAG);
-            }
 
             // TODO: move tagging into the tracker.
             // TODO: Let the mob type define the group tags.
