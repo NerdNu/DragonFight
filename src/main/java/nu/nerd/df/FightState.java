@@ -48,6 +48,7 @@ import nu.nerd.beastmaster.PotionSet;
 import nu.nerd.beastmaster.ProbablePotion;
 import nu.nerd.beastmaster.Util;
 import nu.nerd.beastmaster.mobs.DataType;
+import nu.nerd.beastmaster.mobs.MobProperty;
 import nu.nerd.beastmaster.mobs.MobType;
 
 // ----------------------------------------------------------------------------
@@ -327,6 +328,17 @@ public class FightState implements Listener {
             configurationChanged = true;
         }
 
+        // EnderDragon friend groups.
+        MobType dragonMobType = BeastMaster.MOBS.getMobType(EntityType.ENDER_DRAGON);
+        MobProperty dragonFriendGroups = dragonMobType.getProperty("friend-groups");
+        @SuppressWarnings("unchecked")
+        Set<String> dragonFriendGroupsValue = (Set<String>) dragonFriendGroups.getValue();
+        if (dragonFriendGroupsValue == null) {
+            dragonMobType.getProperty("friend-groups").setValue(DataType.TAG_SET.deserialise("df-entity"));
+        } else if (!dragonFriendGroupsValue.contains("df-entity")) {
+            dragonFriendGroupsValue.add("df-entity");
+        }
+
         // Default mob types.
         if (BeastMaster.MOBS.getMobType("df-support") == null) {
             MobType dfSupport = new MobType("df-support", "skeleton");
@@ -346,7 +358,6 @@ public class FightState implements Listener {
         }
         if (BeastMaster.MOBS.getMobType("df-boss") == null) {
             MobType dfBoss = new MobType("df-boss", "df-support");
-            dfBoss.getProperty("attack-damage").setValue(50.0);
             dfBoss.getProperty("potion-buffs").setValue("df-boss-potions");
             dfBoss.getProperty("health").setValue(300.0);
             dfBoss.getProperty("groups").setValue(DataType.TAG_SET.deserialise("df-boss,df-entity"));
@@ -371,9 +382,26 @@ public class FightState implements Listener {
             BeastMaster.LOOTS.addDropSet(dfDragonDrops);
             configurationChanged = true;
         }
-        if (BeastMaster.LOOTS.getDropSet("df-no-drops") == null) {
-            BeastMaster.LOOTS.addDropSet(new DropSet("df-no-drops"));
+
+        // Force df-no-drops to only drop NOTHING. Avoid saving always.
+        DropSet dfNoDrops = BeastMaster.LOOTS.getDropSet("df-no-drops");
+        if (dfNoDrops == null) {
+            dfNoDrops = new DropSet("df-no-drops");
+            dfNoDrops.addDrop(new Drop(DropType.NOTHING, "NOTHING", 1.0, 1, 1));
+            BeastMaster.LOOTS.addDropSet(dfNoDrops);
             configurationChanged = true;
+        } else {
+            Drop nothing = dfNoDrops.getDrop("NOTHING");
+            if (nothing == null ||
+                nothing.getDropType() != DropType.NOTHING ||
+                dfNoDrops.getAllDrops().size() != 1) {
+
+                dfNoDrops = new DropSet("df-no-drops");
+                dfNoDrops.addDrop(new Drop(DropType.NOTHING, "NOTHING", 1.0, 1, 1));
+                BeastMaster.LOOTS.removeDropSet("df-no-drops");
+                BeastMaster.LOOTS.addDropSet(dfNoDrops);
+                configurationChanged = true;
+            }
         }
 
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {

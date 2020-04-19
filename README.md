@@ -108,7 +108,6 @@ The `df-boss` mob inherits all of the above properties from `df-support` and
 sets the following default properties when first defined by the DragonFight
 plugin:
 
- * `attack-damage` 50.0
  * `potion-buffs` df-boss-potions
  * `health` 300.0
  * `groups` df-boss,df-entity
