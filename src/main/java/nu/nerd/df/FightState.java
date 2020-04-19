@@ -32,6 +32,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -520,6 +521,28 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Prevent bosses and other df-entity group mobs from using the end portal.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    protected void onEntityPortal(EntityPortalEvent event) {
+        Entity entity = event.getEntity();
+        if (!isFightWorld(entity.getWorld())) {
+            return;
+        }
+
+        MobType mobType = BeastMaster.getMobType(entity);
+        if (mobType != null) {
+            @SuppressWarnings("unchecked")
+            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
+            if (groups != null && groups.contains(ENTITY_TAG)) {
+                event.setCancelled(true);
+                returnMobToBossSpawn(mobType, entity);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Prevent players from placing end crystals on bedrock in the end during
      * the SUMMONING_PILLARS phase of the dragon fight.
      * 
@@ -775,7 +798,7 @@ public class FightState implements Listener {
         @Override
         public void run() {
             long start = System.nanoTime();
-            World fightWorld = Bukkit.getWorld(FightState.FIGHT_WORLD);
+            World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
             BoundingBox box = new BoundingBox(-TRACKED_RADIUS, 0, -TRACKED_RADIUS,
                                               TRACKED_RADIUS, 256, TRACKED_RADIUS);
             Collection<Entity> entities = fightWorld.getNearbyEntities(box);
