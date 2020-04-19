@@ -1,5 +1,6 @@
 package nu.nerd.df;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,6 +23,7 @@ import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -37,6 +39,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
+import org.bukkit.util.BoundingBox;
 
 import net.md_5.bungee.api.ChatColor;
 import nu.nerd.beastmaster.BeastMaster;
@@ -64,6 +67,7 @@ public class FightState implements Listener {
         findEndCrystals();
         debug("Detected stage: " + _stageNumber);
         defineBeastMasterObjects();
+        Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
     }
 
     // ------------------------------------------------------------------------
@@ -678,7 +682,7 @@ public class FightState implements Listener {
      * If players decide to arrange the arena to frustrate efforts to find a
      * location to spawn the boss, moderate them hard.
      */
-    protected Location getBossSpawnLocation() {
+    protected static Location getBossSpawnLocation() {
         World world = Bukkit.getWorld(FIGHT_WORLD);
         double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
         double angle = Util.random() * 2.0 * Math.PI;
@@ -710,6 +714,19 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * If the specified entity is a mob, teleport it to a boss spawn location,
+     * playing particle and sound effects.
+     * 
+     * @param entity the mob.
+     */
+    protected static void returnMobToBossSpawn(MobType mobType, Entity entity) {
+        Util.doTeleportEffects(mobType, entity.getLocation());
+        Location newLoc = FightState.getBossSpawnLocation();
+        entity.teleport(newLoc);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Play a sound effect at the location with standard options.
      * 
      * @param loc the location.
@@ -732,6 +749,77 @@ public class FightState implements Listener {
         .filter(p -> getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
         .collect(Collectors.toList());
     }
+
+    // ------------------------------------------------------------------------
+    /**
+     * A repeating task that tracks boss fight participants to:
+     * 
+     * <ul>
+     * <li>Return bosses to the fight area when they go outside the designated
+     * radius or below a certain Y coordinate.</li>
+     * <li>Return bosses to the fight area when they haven't taken damage in a
+     * minute, indicating the player can't find them.</li>
+     * </ul>
+     */
+    private final class TrackerTask implements Runnable {
+        // --------------------------------------------------------------------
+        /**
+         * Period in ticks between runs of this task.
+         */
+        static final int PERIOD_TICKS = 40;
+
+        // --------------------------------------------------------------------
+        /**
+         * @see java.lang.Runnable#run()
+         */
+        @Override
+        public void run() {
+            long start = System.nanoTime();
+            World fightWorld = Bukkit.getWorld(FightState.FIGHT_WORLD);
+            BoundingBox box = new BoundingBox(-TRACKED_RADIUS, 0, -TRACKED_RADIUS,
+                                              TRACKED_RADIUS, 256, TRACKED_RADIUS);
+            Collection<Entity> entities = fightWorld.getNearbyEntities(box);
+            for (Entity mob : entities) {
+                if (mob instanceof LivingEntity) {
+                    Location loc = mob.getLocation();
+                    if (loc.getY() < MIN_BOSS_Y || getMagnitude2D(loc) > BOSS_RADIUS) {
+                        MobType mobType = BeastMaster.getMobType(mob);
+                        if (mobType != null) {
+                            @SuppressWarnings("unchecked")
+                            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
+                            if (groups != null && groups.contains(BOSS_TAG)) {
+                                returnMobToBossSpawn(mobType, mob);
+                            }
+                        }
+                    }
+                }
+            }
+            // debug("TrackerTask: " + (System.nanoTime() - start) * 1e-6 + "
+            // ms");
+        }
+
+        // --------------------------------------------------------------------
+        /**
+         * Minumum allowed Y coordinate of a boss before being moved back to a
+         * boss spawn location.
+         */
+        private static final double MIN_BOSS_Y = 40.0;
+
+        /**
+         * Maximum XZ distance from spawn of any boss, before being respawned
+         * between the pillars.
+         */
+        private static final double BOSS_RADIUS = 60.0;
+
+        /**
+         * Radius in which entities are checked.
+         * 
+         * This needs to be larger than BOSS_RADIUS to account for the maximum
+         * distance the mob could travel in PERIOD_TICKS.
+         */
+        private static final double TRACKED_RADIUS = BOSS_RADIUS + 60.0;
+
+    } // class TrackerTask
 
     // ------------------------------------------------------------------------
     /**
@@ -811,7 +899,7 @@ public class FightState implements Listener {
      * Stage 0 is before the fight, Stage 1 => first crystal removed and boss
      * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
      */
-    protected int _stageNumber;
+    int _stageNumber;
 
     /**
      * Array of 10 {@link Stage}s.
@@ -820,4 +908,8 @@ public class FightState implements Listener {
      */
     protected Stage[] _stages = new Stage[10];
 
+    /**
+     * Tracks mobs to enforce boundaries and update boss bars.
+     */
+    protected TrackerTask _tracker = new TrackerTask();
 } // class FightState

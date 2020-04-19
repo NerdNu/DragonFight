@@ -150,10 +150,11 @@ To prevent mobs from wandering too far off, the DragonFight mob will teleport
 bosses to a random location within the circle between the obsidian pillars if
 they:
 
- * go more than 100 blocks from the centre of the world,
+ * go more than 60 blocks from the centre of the world,
  * have not taken any damage in the last 60 seconds, in which case they've
    probably teleported underground,
- * go below Y0, in which case they are about to fall out of the world, or
+ * go below Y40, in which case they are out of reach or may be about to fall
+   out of the world, or
  * if the mob is about to use a portal.
 
 
