@@ -31,6 +31,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
@@ -489,6 +490,27 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Protect the End Crystals on the pillars, since setInvulnerable(true) is
+     * currently broken, apparently.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    public void onEntityDamage(EntityDamageEvent event) {
+        Entity entity = event.getEntity();
+        if (!isFightWorld(entity.getWorld())) {
+            return;
+        }
+
+        if (!(entity instanceof EnderCrystal)) {
+            return;
+        }
+
+        if (_crystals.contains(entity)) {
+            event.setCancelled(true);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * When a stage is cleared of all its boss mobs, spawn the next stage.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -598,7 +620,10 @@ public class FightState implements Listener {
 
         crystal.getScoreboardTags().add(CRYSTAL_TAG);
         crystal.setGlowing(true);
+
+        // Currently doesn't do anything. Bug report needed:
         crystal.setInvulnerable(true);
+
         playSound(loc, Sound.BLOCK_BEACON_POWER_SELECT);
         loc.getWorld().strikeLightningEffect(loc);
     }
