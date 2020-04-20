@@ -1,6 +1,6 @@
 package nu.nerd.df;
 
-import java.util.List;
+import java.util.Collection;
 
 import org.bukkit.entity.Player;
 
@@ -37,6 +37,7 @@ public class Stage {
     public Stage(int stageNumber) {
         _stageNumber = stageNumber;
         _dropSetId = getDropSetId(stageNumber);
+        _title = "Stage " + _stageNumber;
     }
 
     // ------------------------------------------------------------------------
@@ -55,11 +56,21 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
+     * Return the title of this stage.
+     * 
+     * @return the title of this stage.
+     */
+    public String getTitle() {
+        return _title;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Show the stage title to the specified players.
      * 
      * @param players the players that should see the title.
      */
-    public void announce(List<Player> players) {
+    public void announce(Collection<Player> players) {
         for (Player player : players) {
             // Subtitles are not visible if there is no title.
             if (!_title.isEmpty()) {
@@ -78,6 +89,11 @@ public class Stage {
     protected int _stageNumber;
 
     /**
+     * The total maximum health of all bosses spawned for this stage.
+     */
+    protected double _maxHealth;
+
+    /**
      * The DropSet ID.
      */
     protected String _dropSetId;
@@ -90,7 +106,7 @@ public class Stage {
     /**
      * The stage subtitle text.
      */
-    protected String _subtitle = "";
+    protected String _subtitle = "(test title, pls ignore)";
 
     /**
      * Message sent to players.

@@ -14,7 +14,10 @@ import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
+import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarFlag;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.boss.DragonBattle.RespawnPhase;
 import org.bukkit.command.CommandSender;
@@ -132,6 +135,11 @@ public class FightState implements Listener {
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed mobs: " + ChatColor.LIGHT_PURPLE + mobCount);
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + ChatColor.LIGHT_PURPLE + projectileCount);
         _stageNumber = 0;
+
+        // Immediately hide the boss bar, rather than waiting for update.
+        if (_bossBar != null) {
+            _bossBar.setVisible(false);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -178,6 +186,10 @@ public class FightState implements Listener {
             nextStage();
         } else {
             _stageNumber = 11;
+
+            // Show a fixed stage 11 title for the dragon.
+            getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
+                                                        ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
         }
     }
 
@@ -440,6 +452,7 @@ public class FightState implements Listener {
             }
         }
 
+        // Initialise stage loot tables.
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             _stages[stageNumber - 1] = new Stage(stageNumber);
 
@@ -737,6 +750,7 @@ public class FightState implements Listener {
      * This method is called to do the boss spawning sequence for stages 1 to
      * 10.
      */
+    @SuppressWarnings("deprecation")
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
@@ -775,8 +789,8 @@ public class FightState implements Listener {
 
         // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
-            Stage stage = _stages[_stageNumber];
             ++_stageNumber;
+            Stage stage = getCurrentStage();
             debug("Beginning stage: " + _stageNumber);
 
             // Despawn the crystal that becomes the boss.
@@ -786,15 +800,19 @@ public class FightState implements Listener {
             replacedCrystal.remove();
 
             // Spawn boss or bosses and set up for tracking.
-            DropResults bosses = new DropResults();
+            DropResults results = new DropResults();
             DropSet dropSet = stage.getDropSet();
-            dropSet.generateRandomDrops(bosses, "DragonFight stage " + stage, null, bossSpawnLocation);
+            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
 
-            // TODO: move tagging into the tracker.
-            // TODO: Let the mob type define the group tags.
+            // Compute the total health for the stage's boss bar.
+            _totalBossMaxHealth = results.getMobs().stream()
+            .filter(mob -> hasTagOrGroup(mob, BOSS_TAG))
+            .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
+
+            // TODO: stage max health needs to be save in case of restart.
 
             // Show the title.
-            List<Player> nearby = getNearbyPlayers();
+            Set<Player> nearby = getNearbyPlayers();
             debug(nearby.size() + " players nearby.");
             stage.announce(nearby);
         }, STAGE_START_DELAY);
@@ -871,11 +889,68 @@ public class FightState implements Listener {
      * 
      * @return nearby players.
      */
-    protected List<Player> getNearbyPlayers() {
+    protected Set<Player> getNearbyPlayers() {
         World world = Bukkit.getWorld(FIGHT_WORLD);
         return world.getPlayers().stream()
         .filter(p -> getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
-        .collect(Collectors.toList());
+        .collect(Collectors.toSet());
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return the {@link Stage} instance for the current stage, or null if there
+     * is no battle ongoing.
+     * 
+     * Note that _stageNumber is one higher than the array index.
+     * 
+     * @return the {@link Stage} instance for the current stage, or null if
+     *         there is no battle ongoing.
+     */
+    protected Stage getCurrentStage() {
+        return _stageNumber == 0 ? null : _stages[_stageNumber - 1];
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Update the BossBar for the current stage.
+     * 
+     * If we're not in stage 1-10, don't show a boss bar, even if we have some
+     * test bosses.
+     */
+    protected void updateBossBar() {
+        if (_bosses.size() == 0 || _stageNumber < 1 || _stageNumber > 10) {
+            if (_bossBar != null) {
+                _bossBar.setVisible(false);
+            }
+            return;
+        }
+
+        // TODO: remove after total boss max health is persistent.
+        if (_totalBossMaxHealth < 1.0) {
+            _totalBossMaxHealth = _bosses.stream()
+            .filter(mob -> hasTagOrGroup(mob, BOSS_TAG))
+            .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
+        }
+        // debug("Stage: " + _stageNumber + ", Bosses: " + _bosses.size() + ",
+        // Max: " + _totalBossMaxHealth);
+
+        // Non-zero number of bosses. Stage 1 to 10.
+        // Ensure we have a bar for the stage.
+        Stage stage = getCurrentStage();
+        if (_bossBar == null) {
+            _bossBar = Bukkit.createBossBar("", BarColor.RED, BarStyle.SOLID, new BarFlag[0]);
+        }
+        _bossBar.setTitle(stage.getTitle());
+        _bossBar.setVisible(true);
+
+        // Update the players who see the bar.
+        _bossBar.removeAll();
+        getNearbyPlayers().forEach(p -> _bossBar.addPlayer(p));
+
+        // Update the bar progress according to total remaining boss health.
+        double totalBossHealth = _bosses.stream()
+        .reduce(0.0, (sum, b) -> sum + b.getHealth(), (h1, h2) -> h1 + h2);
+        _bossBar.setProgress(Util.clamp(totalBossHealth / _totalBossMaxHealth, 0.0, 1.0));
     }
 
     // ------------------------------------------------------------------------
@@ -937,8 +1012,9 @@ public class FightState implements Listener {
                     returnMobToBossSpawn(mobType, boss);
                     boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
                 }
-            }
-        }
+            } // while
+            updateBossBar();
+        } // run
     } // class TrackerTask
 
     // ------------------------------------------------------------------------
@@ -1062,9 +1138,22 @@ public class FightState implements Listener {
     int _stageNumber;
 
     /**
+     * Sum of the maximum health of all current stage bosses so that the boss
+     * bar can show the correct progress.
+     * 
+     * For ad-hoc testing, this updates whenever the total maximum health of all
+     * bosses exceeds the current _totalBossMaxHealth value.
+     * 
+     * TODO: this needs to be saved with the configuration for restarts.
+     */
+    protected double _totalBossMaxHealth;
+
+    /**
      * Array of 10 {@link Stage}s.
      * 
      * Stage N is at index N-1.
+     * 
+     * Stage 11, the dragon on its own, does not use a Stage instance.
      */
     protected Stage[] _stages = new Stage[10];
 
@@ -1072,4 +1161,9 @@ public class FightState implements Listener {
      * Tracks mobs to enforce boundaries and update boss bars.
      */
     protected TrackerTask _tracker = new TrackerTask();
+
+    /**
+     * Current stage boss bar, which tracks all currently active bosses.
+     */
+    protected BossBar _bossBar;
 } // class FightState
