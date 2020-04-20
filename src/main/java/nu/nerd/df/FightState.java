@@ -2,6 +2,7 @@ package nu.nerd.df;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,7 +38,11 @@ import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.metadata.MetadataValue;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
@@ -59,6 +64,9 @@ import nu.nerd.beastmaster.mobs.MobType;
 // ----------------------------------------------------------------------------
 /**
  * Records state information about the current dragon fight.
+ * 
+ * Define the term "arena" to mean the space within the circle of obsidian
+ * pillars in the end.
  */
 public class FightState implements Listener {
     // ------------------------------------------------------------------------
@@ -66,7 +74,7 @@ public class FightState implements Listener {
      * Actions performed on plugin enable.
      */
     public void onEnable() {
-        findEndCrystals();
+        discoverFightState();
         debug("Detected stage: " + _stageNumber);
         defineBeastMasterObjects();
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
@@ -101,6 +109,12 @@ public class FightState implements Listener {
         }
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
         _crystals.clear();
+
+        for (LivingEntity boss : _bosses) {
+            boss.remove();
+        }
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed bosses: " + ChatColor.LIGHT_PURPLE + _bosses.size());
+        _bosses.clear();
 
         int projectileCount = 0;
         int mobCount = 0;
@@ -253,12 +267,15 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * When the plugin initialises, infer the state of the fight, including the
+     * stage number, based on the presence of crystals, the dragon and bosses.
+     * 
      * Find the ender crystals that are part of the current dragon fight.
      * 
      * There is no ChunkLoadEvent for spawn chunks, so we need to scan loaded
      * chunks on startup.
      */
-    protected void findEndCrystals() {
+    protected void discoverFightState() {
         World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
         double radius = PILLAR_CIRCLE_RADIUS * 1.1;
         Location origin = new Location(fightWorld, 0, 64, 0);
@@ -283,6 +300,19 @@ public class FightState implements Listener {
             }
             _stageNumber = 11;
         }
+
+        // Find bosses within the discoverable range.
+        BoundingBox box = new BoundingBox(-TRACKED_RADIUS, 0, -TRACKED_RADIUS,
+                                          TRACKED_RADIUS, 256, TRACKED_RADIUS);
+        Collection<Entity> entities = fightWorld.getNearbyEntities(box);
+        for (Entity entity : entities) {
+            if (entity instanceof LivingEntity) {
+                if (hasTagOrGroup(entity, BOSS_TAG)) {
+                    _bosses.add((LivingEntity) entity);
+                }
+            }
+        }
+        debug("Discovered bosses: " + _bosses.size());
     }
 
     // ------------------------------------------------------------------------
@@ -437,6 +467,8 @@ public class FightState implements Listener {
      * When the dragon spawns, handle it with
      * {@link #onDragonSpawn(EnderDragon)}.
      * 
+     * Track any mobs that spawn with the boss group.
+     * 
      * Handle end crystals spawns during the pillar-summoning phase only with
      * {@link #onCrystalSpawn(EnderCrystal)}.
      */
@@ -455,6 +487,11 @@ public class FightState implements Listener {
             onDragonSpawn((EnderDragon) entity);
         }
 
+        // Track the bosses.
+        if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+            _bosses.add((LivingEntity) entity);
+        }
+
         DragonBattle battle = world.getEnderDragonBattle();
         if (battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
             return;
@@ -462,6 +499,40 @@ public class FightState implements Listener {
 
         if (entity instanceof EnderCrystal) {
             onCrystalSpawn((EnderCrystal) entity);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * When loading a chunk in the fight world, track any bosses.
+     */
+    @EventHandler()
+    protected void onChunkLoad(ChunkLoadEvent event) {
+        if (!isFightWorld(event.getWorld())) {
+            return;
+        }
+
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+                _bosses.add((LivingEntity) entity);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * When unloading a chunk in the fight world, un-track any bosses.
+     */
+    @EventHandler()
+    protected void onChunkUnload(ChunkUnloadEvent event) {
+        if (!isFightWorld(event.getWorld())) {
+            return;
+        }
+
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+                _bosses.remove(entity);
+            }
         }
     }
 
@@ -500,12 +571,17 @@ public class FightState implements Listener {
             return;
         }
 
-        if (!(entity instanceof EnderCrystal)) {
+        if (entity instanceof EnderCrystal) {
+            if (_crystals.contains(entity)) {
+                event.setCancelled(true);
+            }
             return;
         }
 
-        if (_crystals.contains(entity)) {
-            event.setCancelled(true);
+        // Update the "last seen time" of bosses.
+        if (hasTagOrGroup(entity, BOSS_TAG)) {
+            Long now = System.currentTimeMillis();
+            entity.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
         }
     }
 
@@ -515,7 +591,8 @@ public class FightState implements Listener {
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     protected void onEntityDeath(EntityDeathEvent event) {
-        if (!isFightWorld(event.getEntity().getWorld())) {
+        Entity entity = event.getEntity();
+        if (!isFightWorld(entity.getWorld())) {
             return;
         }
 
@@ -526,8 +603,12 @@ public class FightState implements Listener {
             return;
         }
 
-        // TODO: actually needs to wait until all stage bosses are dead.
-        if (_stageNumber != 0 && hasTagOrGroup(event.getEntity(), BOSS_TAG)) {
+        boolean bossDied = hasTagOrGroup(entity, BOSS_TAG);
+        if (bossDied) {
+            _bosses.remove(entity);
+        }
+
+        if (_stageNumber != 0 && bossDied && _bosses.isEmpty()) {
             // TODO: update the stage boss bar.
             // TODO: consult the tracker rather than assuming there is only a
             // single boss.
@@ -554,9 +635,7 @@ public class FightState implements Listener {
 
         MobType mobType = BeastMaster.getMobType(entity);
         if (mobType != null) {
-            @SuppressWarnings("unchecked")
-            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
-            if (groups != null && groups.contains(ENTITY_TAG)) {
+            if (hasTagOrGroup(entity, ENTITY_TAG)) {
                 event.setCancelled(true);
                 returnMobToBossSpawn(mobType, entity);
             }
@@ -723,7 +802,8 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Choose a random location to spawn the boss with a 3x3x3 volume of air.
+     * Choose a random location to spawn the boss with a 3x3x3 volume of air
+     * within the arena.
      * 
      * If a suitable location cannot be found, put it on the portal pillar.
      * 
@@ -814,7 +894,7 @@ public class FightState implements Listener {
         /**
          * Period in ticks between runs of this task.
          */
-        static final int PERIOD_TICKS = 40;
+        static final int PERIOD_TICKS = 20;
 
         // --------------------------------------------------------------------
         /**
@@ -822,51 +902,43 @@ public class FightState implements Listener {
          */
         @Override
         public void run() {
-            long start = System.nanoTime();
-            World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
-            BoundingBox box = new BoundingBox(-TRACKED_RADIUS, 0, -TRACKED_RADIUS,
-                                              TRACKED_RADIUS, 256, TRACKED_RADIUS);
-            Collection<Entity> entities = fightWorld.getNearbyEntities(box);
-            for (Entity mob : entities) {
-                if (mob instanceof LivingEntity) {
-                    Location loc = mob.getLocation();
-                    if (loc.getY() < MIN_BOSS_Y || getMagnitude2D(loc) > BOSS_RADIUS) {
-                        MobType mobType = BeastMaster.getMobType(mob);
-                        if (mobType != null) {
-                            @SuppressWarnings("unchecked")
-                            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
-                            if (groups != null && groups.contains(BOSS_TAG)) {
-                                returnMobToBossSpawn(mobType, mob);
-                            }
-                        }
+            Iterator<LivingEntity> it = _bosses.iterator();
+            while (it.hasNext()) {
+                LivingEntity boss = it.next();
+
+                // Clean up bosses that have been remove()d, e.g. by /butcher.
+                if (!boss.isValid()) {
+                    it.remove();
+                }
+
+                // Track last seen time of bosses.
+                long now = System.currentTimeMillis();
+                List<MetadataValue> metas = boss.getMetadata(BOSS_SEEN_TIME_KEY);
+                if (metas.isEmpty()) {
+                    boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
+                } else {
+                    long lastSeen = metas.get(0).asLong();
+                    if (now - lastSeen > MAX_BOSS_NO_SEEN_TIME_MS) {
+                        MobType mobType = BeastMaster.getMobType(boss);
+                        debug("Returning " + mobType.getId() + " " +
+                              boss.getUniqueId().toString().substring(0, 8) + " to the arena due to timeout.");
+                        returnMobToBossSpawn(mobType, boss);
+                        boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
+                        continue;
                     }
                 }
+
+                // Enforce "last seen" and position limits on bosses.
+                Location loc = boss.getLocation();
+                if (loc.getY() < MIN_BOSS_Y || getMagnitude2D(loc) > BOSS_RADIUS) {
+                    MobType mobType = BeastMaster.getMobType(boss);
+                    debug("Returning " + mobType.getId() + " " +
+                          boss.getUniqueId().toString().substring(0, 8) + " to the arena due to location.");
+                    returnMobToBossSpawn(mobType, boss);
+                    boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
+                }
             }
-            // debug("TrackerTask: " + (System.nanoTime() - start) * 1e-6 + "
-            // ms");
         }
-
-        // --------------------------------------------------------------------
-        /**
-         * Minumum allowed Y coordinate of a boss before being moved back to a
-         * boss spawn location.
-         */
-        private static final double MIN_BOSS_Y = 40.0;
-
-        /**
-         * Maximum XZ distance from spawn of any boss, before being respawned
-         * between the pillars.
-         */
-        private static final double BOSS_RADIUS = 60.0;
-
-        /**
-         * Radius in which entities are checked.
-         * 
-         * This needs to be larger than BOSS_RADIUS to account for the maximum
-         * distance the mob could travel in PERIOD_TICKS.
-         */
-        private static final double TRACKED_RADIUS = BOSS_RADIUS + 60.0;
-
     } // class TrackerTask
 
     // ------------------------------------------------------------------------
@@ -933,11 +1005,51 @@ public class FightState implements Listener {
      */
     private static final double ORIGIN_Y = 60;
 
+    /**
+     * Minimum allowed Y coordinate of a boss before being moved back to a boss
+     * spawn location.
+     */
+    private static final double MIN_BOSS_Y = 40.0;
+
+    /**
+     * Maximum XZ distance from spawn of any boss, before being respawned
+     * between the pillars.
+     */
+    private static final double BOSS_RADIUS = 80.0;
+
+    /**
+     * Radius in which entities are checked.
+     * 
+     * This needs to be larger than BOSS_RADIUS to account for the maximum
+     * distance the mob could travel in PERIOD_TICKS.
+     */
+    private static final double TRACKED_RADIUS = BOSS_RADIUS + 100.0;
+
+    /**
+     * System.currentMillis() timestamp of the last time a boss took damage or
+     * was teleported back to the arena.
+     */
+    private static String BOSS_SEEN_TIME_KEY = "seen-time";
+
+    /**
+     * Maximum time in milliseconds that a boss is allowed to stand around not
+     * taking damage before being teleported back to the arena.
+     */
+    private static final long MAX_BOSS_NO_SEEN_TIME_MS = 90 * 1000;
+
     // ------------------------------------------------------------------------
     /**
      * The remaining end crystals.
      */
     protected HashSet<EnderCrystal> _crystals = new HashSet<>();
+
+    /**
+     * The current set of boss mobs.
+     * 
+     * Used to efficiently enforce movement limits and update the current
+     * stage's boss bar.
+     */
+    protected HashSet<LivingEntity> _bosses = new HashSet<>();
 
     /**
      * Current stage number.
