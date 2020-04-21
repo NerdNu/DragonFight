@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -51,7 +52,6 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.util.BoundingBox;
 
-import net.md_5.bungee.api.ChatColor;
 import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.Drop;
 import nu.nerd.beastmaster.DropResults;
@@ -576,9 +576,12 @@ public class FightState implements Listener {
     /**
      * Protect the End Crystals on the pillars, since setInvulnerable(true) is
      * currently broken, apparently.
+     * 
+     * This event needs to be processed before e.g. SafeCrystals drops a
+     * crystal.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
-    public void onEntityDamage(EntityDamageEvent event) {
+    public void onEntityDamageEarly(EntityDamageEvent event) {
         Entity entity = event.getEntity();
         if (!isFightWorld(entity.getWorld())) {
             return;
@@ -590,11 +593,35 @@ public class FightState implements Listener {
             }
             return;
         }
+    }
 
-        // Update the "last seen time" of bosses.
+    // ------------------------------------------------------------------------
+    /**
+     * What is this madness? Two handlers for the same event?! Well, one of them
+     * has to be early and the other late.
+     * 
+     * We need to check the final outcome of the EntityDamageEvent in order to
+     * correctly update boss state, since some other plugin may have cancelled
+     * the event.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    public void onEntityDamageLate(EntityDamageEvent event) {
+        Entity entity = event.getEntity();
+        if (!isFightWorld(entity.getWorld())) {
+            return;
+        }
+
+        // Update the "last seen time" of bosses and update boss bar.
         if (hasTagOrGroup(entity, BOSS_TAG)) {
             Long now = System.currentTimeMillis();
             entity.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
+
+            LivingEntity boss = (LivingEntity) entity;
+            if (_bossBar != null && _bossBar.isVisible()) {
+                double finalHealth = Math.max(0.0, boss.getHealth() - event.getFinalDamage());
+                double healthLoss = boss.getHealth() - finalHealth;
+                _bossBar.setProgress(Util.clamp(_bossBar.getProgress() - healthLoss / _totalBossMaxHealth, 0.0, 1.0));
+            }
         }
     }
 
