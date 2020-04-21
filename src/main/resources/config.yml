@@ -1,41 +1,54 @@
+state:
+  total-boss-max-health: 0
+
 stages:
-  1:
-    title: Stage 1
+  '1':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  2:
-    title: Stage 2
+  '2':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  3:
-    title: Stage 3
+  '3':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  4:
-    title: Stage 4
+  '4':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  5:
-    title: Stage 5
+  '5':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  6:
-    title: Stage 6
+  '6':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  7:
-    title: Stage 7
+  '7':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  8:
-    title: Stage 8
+  '8':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  9:
-    title: Stage 9
+  '9':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''
-  10:
-    title: Stage 10
+  '10':
+    barcolor: WHITE
+    title: '&5Stage {}'
     subtitle: ''
     message: ''

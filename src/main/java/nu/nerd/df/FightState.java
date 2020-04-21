@@ -80,6 +80,7 @@ public class FightState implements Listener {
         discoverFightState();
         debug("Detected stage: " + _stageNumber);
         defineBeastMasterObjects();
+        reconfigureDragonBossBar();
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
     }
 
@@ -454,8 +455,6 @@ public class FightState implements Listener {
 
         // Initialise stage loot tables.
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
-            _stages[stageNumber - 1] = new Stage(stageNumber);
-
             // Add the stage N boss mob loot tables, if not defined.
             String dropSetId = Stage.getDropSetId(stageNumber);
             if (BeastMaster.LOOTS.getDropSet(dropSetId) == null) {
@@ -620,7 +619,8 @@ public class FightState implements Listener {
             if (_bossBar != null && _bossBar.isVisible()) {
                 double finalHealth = Math.max(0.0, boss.getHealth() - event.getFinalDamage());
                 double healthLoss = boss.getHealth() - finalHealth;
-                _bossBar.setProgress(Util.clamp(_bossBar.getProgress() - healthLoss / _totalBossMaxHealth, 0.0, 1.0));
+                double newProgress = _bossBar.getProgress() - healthLoss / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
+                _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
             }
         }
     }
@@ -761,13 +761,21 @@ public class FightState implements Listener {
             return;
         }
 
-        // Let's have it so we can still see.
+        reconfigureDragonBossBar();
+        nextStage();
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Reconfigure the dragon's boss bar to not darken the sky or create fog.
+     */
+    protected void reconfigureDragonBossBar() {
         World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
         DragonBattle battle = fightWorld.getEnderDragonBattle();
-        battle.getBossBar().removeFlag(BarFlag.DARKEN_SKY);
-        battle.getBossBar().removeFlag(BarFlag.CREATE_FOG);
-
-        nextStage();
+        if (battle.getBossBar() != null) {
+            battle.getBossBar().removeFlag(BarFlag.DARKEN_SKY);
+            battle.getBossBar().removeFlag(BarFlag.CREATE_FOG);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -817,7 +825,7 @@ public class FightState implements Listener {
         // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             ++_stageNumber;
-            Stage stage = getCurrentStage();
+            Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
             debug("Beginning stage: " + _stageNumber);
 
             // Despawn the crystal that becomes the boss.
@@ -828,15 +836,15 @@ public class FightState implements Listener {
 
             // Spawn boss or bosses and set up for tracking.
             DropResults results = new DropResults();
-            DropSet dropSet = stage.getDropSet();
-            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
+            DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
+            if (dropSet != null) {
+                dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
+            }
 
             // Compute the total health for the stage's boss bar.
-            _totalBossMaxHealth = results.getMobs().stream()
+            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = results.getMobs().stream()
             .filter(mob -> hasTagOrGroup(mob, BOSS_TAG))
             .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
-
-            // TODO: stage max health needs to be save in case of restart.
 
             // Show the title.
             Set<Player> nearby = getNearbyPlayers();
@@ -925,20 +933,6 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Return the {@link Stage} instance for the current stage, or null if there
-     * is no battle ongoing.
-     * 
-     * Note that _stageNumber is one higher than the array index.
-     * 
-     * @return the {@link Stage} instance for the current stage, or null if
-     *         there is no battle ongoing.
-     */
-    protected Stage getCurrentStage() {
-        return _stageNumber == 0 ? null : _stages[_stageNumber - 1];
-    }
-
-    // ------------------------------------------------------------------------
-    /**
      * Update the BossBar for the current stage.
      * 
      * If we're not in stage 1-10, don't show a boss bar, even if we have some
@@ -952,22 +946,13 @@ public class FightState implements Listener {
             return;
         }
 
-        // TODO: remove after total boss max health is persistent.
-        if (_totalBossMaxHealth < 1.0) {
-            _totalBossMaxHealth = _bosses.stream()
-            .filter(mob -> hasTagOrGroup(mob, BOSS_TAG))
-            .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
-        }
-        // debug("Stage: " + _stageNumber + ", Bosses: " + _bosses.size() + ",
-        // Max: " + _totalBossMaxHealth);
-
-        // Non-zero number of bosses. Stage 1 to 10.
-        // Ensure we have a bar for the stage.
-        Stage stage = getCurrentStage();
+        // We have a non-zero number of bosses. Stage 1 to 10. Sow the bar.
+        Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
         if (_bossBar == null) {
-            _bossBar = Bukkit.createBossBar("", BarColor.RED, BarStyle.SOLID, new BarFlag[0]);
+            _bossBar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID, new BarFlag[0]);
         }
-        _bossBar.setTitle(stage.getTitle());
+        _bossBar.setColor(stage.getBarColor());
+        _bossBar.setTitle(stage.format(stage.getTitle()));
         _bossBar.setVisible(true);
 
         // Update the players who see the bar.
@@ -977,7 +962,8 @@ public class FightState implements Listener {
         // Update the bar progress according to total remaining boss health.
         double totalBossHealth = _bosses.stream()
         .reduce(0.0, (sum, b) -> sum + b.getHealth(), (h1, h2) -> h1 + h2);
-        _bossBar.setProgress(Util.clamp(totalBossHealth / _totalBossMaxHealth, 0.0, 1.0));
+        double newProgress = totalBossHealth / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
+        _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
     }
 
     // ------------------------------------------------------------------------
@@ -1163,26 +1149,6 @@ public class FightState implements Listener {
      * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
      */
     int _stageNumber;
-
-    /**
-     * Sum of the maximum health of all current stage bosses so that the boss
-     * bar can show the correct progress.
-     * 
-     * For ad-hoc testing, this updates whenever the total maximum health of all
-     * bosses exceeds the current _totalBossMaxHealth value.
-     * 
-     * TODO: this needs to be saved with the configuration for restarts.
-     */
-    protected double _totalBossMaxHealth;
-
-    /**
-     * Array of 10 {@link Stage}s.
-     * 
-     * Stage N is at index N-1.
-     * 
-     * Stage 11, the dragon on its own, does not use a Stage instance.
-     */
-    protected Stage[] _stages = new Stage[10];
 
     /**
      * Tracks mobs to enforce boundaries and update boss bars.

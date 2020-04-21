@@ -19,6 +19,11 @@ public class DragonFight extends JavaPlugin {
     public static DragonFight PLUGIN;
 
     /**
+     * Configuration as singleton.
+     */
+    public static Configuration CONFIG = new Configuration();
+
+    /**
      * Current fight as singleton.
      */
     public static FightState FIGHT = new FightState();
@@ -31,6 +36,7 @@ public class DragonFight extends JavaPlugin {
     public void onEnable() {
         PLUGIN = this;
         saveDefaultConfig();
+        CONFIG.reload();
 
         addCommandExecutor(new DFExecutor());
 
@@ -45,6 +51,7 @@ public class DragonFight extends JavaPlugin {
     @Override
     public void onDisable() {
         FIGHT.onDisable();
+        CONFIG.save();
     }
 
     // ------------------------------------------------------------------------
