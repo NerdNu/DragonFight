@@ -38,6 +38,11 @@ commands:
       §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
       §e/<command> stop§f - Stop the current fight.
       §e/<command> next§f - Kill the current boss, skipping to the next stage.
+      §e/<command> config <stage>§f - Show the configuration of <stage> 1 to 10.
+      §e/<command> config <stage> barcolor <color>§f - Configure stage bar color.
+      §e/<command> config <stage> title <text>§f - Configure stage title.
+      §e/<command> config <stage> subtitle <text>§f - Configure stage subtitle.
+      §e/<command> config <stage> message <text>§f - Configure stage message.
 
   dragon:
     description: ${project.name} player command.

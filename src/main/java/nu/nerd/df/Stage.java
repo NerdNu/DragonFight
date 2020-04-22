@@ -91,6 +91,16 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
+     * Return the number of this stage.
+     * 
+     * @return the number of this stage.
+     */
+    public int getStageNumber() {
+        return _stageNumber;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Return the DropSet ID that defines the boss mob(s) for this stage.
      * 
      * @return the DropSet ID that defines the boss mob(s) for this stage.
