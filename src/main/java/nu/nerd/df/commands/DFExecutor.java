@@ -49,14 +49,19 @@ public class DFExecutor extends ExecutorBase {
             return true;
         }
 
-        if (args.length >= 2 && args[0].equalsIgnoreCase("config")) {
+        if (args.length >= 1 && args[0].equalsIgnoreCase("config")) {
+            if (args.length == 1) {
+                configUsage(sender);
+                return true;
+            }
+
             Integer stageNumber = Commands.parseNumber(args[1],
                                                        Commands::parseInt,
                                                        n -> n >= 1 && n <= 10,
                                                        null,
                                                        () -> sender.sendMessage(ChatColor.RED + "The stage must be a number from 1 to 10."));
             if (stageNumber == null) {
-                usage(sender);
+                configUsage(sender);
                 return true;
             }
 
@@ -123,7 +128,7 @@ public class DFExecutor extends ExecutorBase {
                         sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + stage.format(stage.getMessage()));
 
                     } else {
-                        usage(sender);
+                        configUsage(sender);
                     }
                 }
                 return true;
@@ -140,7 +145,7 @@ public class DFExecutor extends ExecutorBase {
      * 
      * @param sender the message sender.
      */
-    protected void usage(CommandSender sender) {
+    protected void configUsage(CommandSender sender) {
         sender.sendMessage(ChatColor.RED + "Usage:");
         sender.sendMessage(ChatColor.RED + "  /df config <stage>");
         sender.sendMessage(ChatColor.RED + "  /df config <stage> barcolor <color>");
