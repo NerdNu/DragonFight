@@ -25,7 +25,7 @@ public class DFExecutor extends ExecutorBase {
      * @param subcommands
      */
     public DFExecutor() {
-        super("df", "help", "stop", "next", "config");
+        super("df", "help", "stop", "next", "swap", "config");
     }
 
     // ------------------------------------------------------------------------
@@ -49,6 +49,37 @@ public class DFExecutor extends ExecutorBase {
             return true;
         }
 
+        if (args.length >= 1 && args[0].equalsIgnoreCase("swap")) {
+            if (args.length != 3) {
+                sender.sendMessage(ChatColor.RED + "Usage: /df swap <from> <to>");
+                sender.sendMessage(ChatColor.RED + "Swap two stages by stage number (1 to 10).");
+                return true;
+            }
+            Integer fromNumber = Commands.parseNumber(args[1],
+                                                      Commands::parseInt,
+                                                      n -> n >= 1 && n <= 10,
+                                                      () -> sender.sendMessage(ChatColor.RED + "<from> must be a stage number from 1 to 10."),
+                                                      null);
+            Integer toNumber = Commands.parseNumber(args[2],
+                                                    Commands::parseInt,
+                                                    n -> n >= 1 && n <= 10,
+                                                    () -> sender.sendMessage(ChatColor.RED + "<to> must be a stage number from 1 to 10."),
+                                                    null);
+            if (fromNumber == null || toNumber == null) {
+                return true;
+            }
+
+            Stage.swap(DragonFight.CONFIG.getStage(fromNumber),
+                       DragonFight.CONFIG.getStage(toNumber));
+            DragonFight.CONFIG.save();
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Stages " +
+                               ChatColor.LIGHT_PURPLE + fromNumber +
+                               ChatColor.DARK_PURPLE + " and " +
+                               ChatColor.LIGHT_PURPLE + toNumber +
+                               ChatColor.DARK_PURPLE + " swapped.");
+            return true;
+        }
+
         if (args.length >= 1 && args[0].equalsIgnoreCase("config")) {
             if (args.length == 1) {
                 configUsage(sender);
@@ -58,8 +89,8 @@ public class DFExecutor extends ExecutorBase {
             Integer stageNumber = Commands.parseNumber(args[1],
                                                        Commands::parseInt,
                                                        n -> n >= 1 && n <= 10,
-                                                       null,
-                                                       () -> sender.sendMessage(ChatColor.RED + "The stage must be a number from 1 to 10."));
+                                                       () -> sender.sendMessage(ChatColor.RED + "The stage must be a number from 1 to 10."),
+                                                       null);
             if (stageNumber == null) {
                 configUsage(sender);
                 return true;

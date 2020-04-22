@@ -27,28 +27,29 @@ commands:
     permission: dragonfight.console
     usage: |
 
-      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
-      §e/<command> reload§f - Reload the configuration.
+      §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
+      §5/<command> reload§f - Reload the configuration.
 
   df:
     description: ${project.name} administrative command.
     permission: dragonfight.admin
     usage: |
 
-      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
-      §e/<command> stop§f - Stop the current fight.
-      §e/<command> next§f - Kill the current boss, skipping to the next stage.
-      §e/<command> config <stage>§f - Show the configuration of <stage> 1 to 10.
-      §e/<command> config <stage> barcolor <color>§f - Configure stage bar color.
-      §e/<command> config <stage> title <text>§f - Configure stage title.
-      §e/<command> config <stage> subtitle <text>§f - Configure stage subtitle.
-      §e/<command> config <stage> message <text>§f - Configure stage message.
+      §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
+      §5/<command> stop§f - Stop the current fight.
+      §5/<command> next§f - Kill the current boss, skipping to the next stage.
+      §5/<command> swap <from> <to>§f - Swap two stages by stage number (1 to 10).
+      §5/<command> config <stage>§f - Show the configuration of <stage> 1 to 10.
+      §5/<command> config <stage> barcolor <color>§f - Configure stage bar color.
+      §5/<command> config <stage> title <text>§f - Configure stage title.
+      §5/<command> config <stage> subtitle <text>§f - Configure stage subtitle.
+      §5/<command> config <stage> message <text>§f - Configure stage message.
 
   dragon:
     description: ${project.name} player command.
     permission: dragonfight.user
     usage: |
 
-      §e/<command> help§f - Show this help. Equivalent to §e/help /<command>§f.
-      §e/<command> ...§f - TBD. Stuff like showing your high score.
+      §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
+      §5/<command> ...§f - TBD. Stuff like showing your high score.
 

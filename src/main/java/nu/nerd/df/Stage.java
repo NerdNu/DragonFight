@@ -69,7 +69,7 @@ public class Stage {
         a._title = b._title;
         b._title = tmpTitle;
 
-        String tmpSubtitle = a._title;
+        String tmpSubtitle = a._subtitle;
         a._subtitle = b._subtitle;
         b._subtitle = tmpSubtitle;
 
