@@ -56,7 +56,7 @@ public class DFExecutor extends ExecutorBase {
                 Stage stage = DragonFight.CONFIG.getStage(stageNumber);
                 sender.sendMessage(ChatColor.DARK_PURPLE + "(" + stageNumber + ") " +
                                    ChatColor.WHITE + stage.format(stage.getTitle()) +
-                                   ChatColor.WHITE + " - " +
+                                   ChatColor.WHITE + BAR_COLORS[stage.getBarColor().ordinal()] + " ███ " +
                                    ChatColor.WHITE + stage.format(stage.getSubtitle()));
             }
             return true;
@@ -167,7 +167,7 @@ public class DFExecutor extends ExecutorBase {
             if (args.length == 2) {
                 // Show stage configuration.
                 sender.sendMessage(ChatColor.DARK_PURPLE + "Stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
-                sender.sendMessage(ChatColor.DARK_PURPLE + "barcolor: " + BAR_COLOR_NAMES[stage.getBarColor().ordinal()]);
+                sender.sendMessage(ChatColor.DARK_PURPLE + "barcolor: " + BAR_COLORS[stage.getBarColor().ordinal()] + stage.getBarColor());
                 sender.sendMessage(ChatColor.DARK_PURPLE + "title (unformatted): " + ChatColor.WHITE + stage.getTitle());
                 sender.sendMessage(ChatColor.DARK_PURPLE + "title (formatted): " + ChatColor.WHITE + stage.format(stage.getTitle()));
                 sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (unformatted): " + ChatColor.WHITE + stage.getSubtitle());
@@ -187,7 +187,7 @@ public class DFExecutor extends ExecutorBase {
                             listColors = false;
                             sender.sendMessage(ChatColor.DARK_PURPLE + "Stage " +
                                                ChatColor.LIGHT_PURPLE + stage.getStageNumber() +
-                                               ChatColor.DARK_PURPLE + " bar color: " + BAR_COLOR_NAMES[barColor.ordinal()]);
+                                               ChatColor.DARK_PURPLE + " bar color: " + BAR_COLORS[barColor.ordinal()] + barColor);
                         } catch (IllegalArgumentException ex) {
                             sender.sendMessage(ChatColor.RED + "Invalid bar color name.");
                         }
@@ -195,7 +195,10 @@ public class DFExecutor extends ExecutorBase {
                         sender.sendMessage(ChatColor.RED + "Usage: /df config <stage> barcolor <color>");
                     }
                     if (listColors) {
-                        sender.sendMessage(ChatColor.RED + "Colors: " + Stream.of(BAR_COLOR_NAMES).collect(Collectors.joining(" ")));
+                        sender.sendMessage(ChatColor.RED + "Colors: " +
+                                           Stream.of(BarColor.values())
+                                           .map(c -> BAR_COLORS[c.ordinal()] + c.toString())
+                                           .collect(Collectors.joining(" ")));
                     }
 
                 } else {
@@ -255,16 +258,15 @@ public class DFExecutor extends ExecutorBase {
 
     // ------------------------------------------------------------------------
     /**
-     * Look up table from BarColor ordinal to the corresponding colour name, in
-     * the corresponding chat colour.
+     * Look up table from BarColor ordinal to the corresponding chat colour.
      */
-    private static final String[] BAR_COLOR_NAMES = {
-        ChatColor.LIGHT_PURPLE + "PINK",
-        ChatColor.DARK_AQUA + "BLUE",
-        ChatColor.RED + "RED",
-        ChatColor.GREEN + "GREEN",
-        ChatColor.YELLOW + "YELLOW",
-        ChatColor.DARK_PURPLE + "PURPLE",
-        ChatColor.WHITE + "WHITE"
+    private static final ChatColor[] BAR_COLORS = {
+        ChatColor.LIGHT_PURPLE, // PINK
+        ChatColor.DARK_AQUA, // BLUE
+        ChatColor.RED, // RED
+        ChatColor.GREEN, // GREEN
+        ChatColor.YELLOW, // YELLOW,
+        ChatColor.DARK_PURPLE, // PURPLE
+        ChatColor.WHITE // WHITE
     };
 } // class DFExecutor
