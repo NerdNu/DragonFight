@@ -169,11 +169,11 @@ public class DFExecutor extends ExecutorBase {
                 sender.sendMessage(ChatColor.DARK_PURPLE + "Stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
                 sender.sendMessage(ChatColor.DARK_PURPLE + "barcolor: " + BAR_COLOR_NAMES[stage.getBarColor().ordinal()]);
                 sender.sendMessage(ChatColor.DARK_PURPLE + "title (unformatted): " + ChatColor.WHITE + stage.getTitle());
-                sender.sendMessage(ChatColor.DARK_PURPLE + "title (formatted): " + stage.format(stage.getTitle()));
+                sender.sendMessage(ChatColor.DARK_PURPLE + "title (formatted): " + ChatColor.WHITE + stage.format(stage.getTitle()));
                 sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (unformatted): " + ChatColor.WHITE + stage.getSubtitle());
-                sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (formatted): " + stage.format(stage.getSubtitle()));
+                sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (formatted): " + ChatColor.WHITE + stage.format(stage.getSubtitle()));
                 sender.sendMessage(ChatColor.DARK_PURPLE + "message (unformatted): " + ChatColor.WHITE + stage.getMessage());
-                sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + stage.format(stage.getMessage()));
+                sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + ChatColor.WHITE + stage.format(stage.getMessage()));
                 return true;
             } else if (args.length >= 3) {
                 String propertyArg = args[2];
@@ -210,20 +210,20 @@ public class DFExecutor extends ExecutorBase {
                             DragonFight.CONFIG.save();
                             sender.sendMessage(ChatColor.DARK_PURPLE + "Stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
                             sender.sendMessage(ChatColor.DARK_PURPLE + "title (unformatted): " + ChatColor.WHITE + stage.getTitle());
-                            sender.sendMessage(ChatColor.DARK_PURPLE + "title (formatted): " + stage.format(stage.getTitle()));
+                            sender.sendMessage(ChatColor.DARK_PURPLE + "title (formatted): " + ChatColor.WHITE + stage.format(stage.getTitle()));
                         }
 
                     } else if (propertyArg.equalsIgnoreCase("subtitle")) {
                         stage.setSubtitle(text);
                         DragonFight.CONFIG.save();
                         sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (unformatted): " + ChatColor.WHITE + stage.getSubtitle());
-                        sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (formatted): " + stage.format(stage.getSubtitle()));
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (formatted): " + ChatColor.WHITE + stage.format(stage.getSubtitle()));
 
                     } else if (propertyArg.equalsIgnoreCase("message")) {
                         stage.setMessage(text);
                         DragonFight.CONFIG.save();
                         sender.sendMessage(ChatColor.DARK_PURPLE + "message (unformatted): " + ChatColor.WHITE + stage.getMessage());
-                        sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + stage.format(stage.getMessage()));
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + ChatColor.WHITE + stage.format(stage.getMessage()));
 
                     } else {
                         configUsage(sender);
