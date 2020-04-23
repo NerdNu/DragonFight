@@ -82,6 +82,62 @@ public class DFExecutor extends ExecutorBase {
             return true;
         }
 
+        if (args.length >= 1 && args[0].equalsIgnoreCase("move")) {
+            if (args.length != 3) {
+                sender.sendMessage(ChatColor.RED + "Usage: /df move <from> <to>");
+                sender.sendMessage(ChatColor.RED + "Move stage <from> to stage <to> and shift in-between stages into the gap.");
+                return true;
+            }
+
+            Integer fromNumber = Commands.parseNumber(args[1],
+                                                      Commands::parseInt,
+                                                      n -> n >= 1 && n <= 10,
+                                                      () -> sender.sendMessage(ChatColor.RED + "<from> must be a stage number from 1 to 10."),
+                                                      null);
+            Integer toNumber = Commands.parseNumber(args[2],
+                                                    Commands::parseInt,
+                                                    n -> n >= 1 && n <= 10,
+                                                    () -> sender.sendMessage(ChatColor.RED + "<to> must be a stage number from 1 to 10."),
+                                                    null);
+            if (fromNumber == null || toNumber == null) {
+                return true;
+            }
+
+            if (fromNumber == toNumber) {
+                sender.sendMessage(ChatColor.DARK_PURPLE + "That's the situation already.");
+                return true;
+            }
+
+            // So by here, we know that the from and to numbers differ.
+            DragonFight.PLUGIN.getLogger().info("Swap " + fromNumber + " and " + toNumber);
+            Stage.swap(DragonFight.CONFIG.getStage(fromNumber),
+                       DragonFight.CONFIG.getStage(toNumber));
+
+            // To fix the order, swap as many times as there are stages between.
+            if (fromNumber < toNumber) {
+                for (int stage = fromNumber; stage < toNumber - 1; ++stage) {
+                    DragonFight.PLUGIN.getLogger().info("Swap " + stage + " and " + (stage + 1));
+                    Stage.swap(DragonFight.CONFIG.getStage(stage),
+                               DragonFight.CONFIG.getStage(stage + 1));
+                }
+            } else {
+                // fromNumber > toNumber
+                for (int stage = fromNumber; stage > toNumber + 1; --stage) {
+                    DragonFight.PLUGIN.getLogger().info("Swap " + stage + " and " + (stage - 1));
+                    Stage.swap(DragonFight.CONFIG.getStage(stage),
+                               DragonFight.CONFIG.getStage(stage - 1));
+                }
+            }
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Moved stage " +
+                               ChatColor.LIGHT_PURPLE + fromNumber +
+                               ChatColor.DARK_PURPLE + " to position " +
+                               ChatColor.LIGHT_PURPLE + toNumber +
+                               ChatColor.DARK_PURPLE + ".");
+            DragonFight.CONFIG.save();
+            BeastMaster.CONFIG.save();
+            return true;
+        }
+
         if (args.length >= 1 && args[0].equalsIgnoreCase("config")) {
             if (args.length == 1) {
                 configUsage(sender);
