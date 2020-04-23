@@ -121,21 +121,18 @@ public class DFExecutor extends ExecutorBase {
             }
 
             // So by here, we know that the from and to numbers differ.
-            DragonFight.PLUGIN.getLogger().info("Swap " + fromNumber + " and " + toNumber);
             Stage.swap(DragonFight.CONFIG.getStage(fromNumber),
                        DragonFight.CONFIG.getStage(toNumber));
 
             // To fix the order, swap as many times as there are stages between.
             if (fromNumber < toNumber) {
                 for (int stage = fromNumber; stage < toNumber - 1; ++stage) {
-                    DragonFight.PLUGIN.getLogger().info("Swap " + stage + " and " + (stage + 1));
                     Stage.swap(DragonFight.CONFIG.getStage(stage),
                                DragonFight.CONFIG.getStage(stage + 1));
                 }
             } else {
                 // fromNumber > toNumber
                 for (int stage = fromNumber; stage > toNumber + 1; --stage) {
-                    DragonFight.PLUGIN.getLogger().info("Swap " + stage + " and " + (stage - 1));
                     Stage.swap(DragonFight.CONFIG.getStage(stage),
                                DragonFight.CONFIG.getStage(stage - 1));
                 }
