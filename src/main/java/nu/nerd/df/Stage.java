@@ -35,6 +35,10 @@ public class Stage {
     /**
      * Swap the contents of two stages.
      * 
+     * The Stage instances are intended to stay at the same indicies, so the
+     * stage number doesn't change. Only the properties that determine the
+     * appearance of the stage, and the contents of the DropSets swap.
+     * 
      * @param a a stage.
      * @param b another stage.
      */
@@ -49,16 +53,11 @@ public class Stage {
             bOldDrops = new DropSet(b.getDropSetId());
         }
 
-        // Update stage numbers which also changes getDropSetId() result.
-        int tmpStageNumber = a._stageNumber;
-        a._stageNumber = b._stageNumber;
-        b._stageNumber = tmpStageNumber;
-
         // New drop sets to be registered using new IDs but other's drops.
-        DropSet newADrops = new DropSet(a.getDropSetId(), bOldDrops);
-        DropSet newBDrops = new DropSet(b.getDropSetId(), aOldDrops);
-        BeastMaster.LOOTS.addDropSet(newADrops);
-        BeastMaster.LOOTS.addDropSet(newBDrops);
+        DropSet aNewDrops = new DropSet(a.getDropSetId(), bOldDrops);
+        DropSet bNewDrops = new DropSet(b.getDropSetId(), aOldDrops);
+        BeastMaster.LOOTS.addDropSet(aNewDrops);
+        BeastMaster.LOOTS.addDropSet(bNewDrops);
         // Don't save drops yet, since we may be shuffling all 10 stages.
 
         BarColor tmpBarColor = a._barColor;

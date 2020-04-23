@@ -9,6 +9,7 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 
+import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.commands.Commands;
 import nu.nerd.beastmaster.commands.ExecutorBase;
 import nu.nerd.df.DragonFight;
@@ -72,6 +73,7 @@ public class DFExecutor extends ExecutorBase {
             Stage.swap(DragonFight.CONFIG.getStage(fromNumber),
                        DragonFight.CONFIG.getStage(toNumber));
             DragonFight.CONFIG.save();
+            BeastMaster.CONFIG.save();
             sender.sendMessage(ChatColor.DARK_PURPLE + "Stages " +
                                ChatColor.LIGHT_PURPLE + fromNumber +
                                ChatColor.DARK_PURPLE + " and " +
