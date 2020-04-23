@@ -50,6 +50,18 @@ public class DFExecutor extends ExecutorBase {
             return true;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Stages:");
+            for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+                Stage stage = DragonFight.CONFIG.getStage(stageNumber);
+                sender.sendMessage(ChatColor.DARK_PURPLE + "(" + stageNumber + ") " +
+                                   ChatColor.WHITE + stage.format(stage.getTitle()) +
+                                   ChatColor.WHITE + " - " +
+                                   ChatColor.WHITE + stage.format(stage.getSubtitle()));
+            }
+            return true;
+        }
+
         if (args.length >= 1 && args[0].equalsIgnoreCase("swap")) {
             if (args.length != 3) {
                 sender.sendMessage(ChatColor.RED + "Usage: /df swap <from> <to>");

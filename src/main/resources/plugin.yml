@@ -38,6 +38,7 @@ commands:
       §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
       §5/<command> stop§f - Stop the current fight.
       §5/<command> next§f - Kill the current boss, skipping to the next stage.
+      §5/<command> list§f - List all 10 stage titles and subtitles.
       §5/<command> swap <from> <to>§f - Swap two stages by stage number (1 to 10).
       §5/<command> move <from> <to>§f - Move stage <from> to stage <to> and shift in-between stages into the gap.
       §5/<command> config <stage>§f - Show the configuration of <stage> 1 to 10.
