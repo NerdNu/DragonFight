@@ -293,9 +293,9 @@ public class FightState implements Listener {
         double radius = PILLAR_CIRCLE_RADIUS * 1.1;
         Location origin = new Location(fightWorld, 0, 64, 0);
         for (Entity entity : fightWorld.getNearbyEntities(origin, radius, 64, radius,
-                                                          e -> e.getType() == EntityType.ENDER_CRYSTAL)) {
-            debug("Loaded crystal: " + entity.getUniqueId() +
-                  (entity.getScoreboardTags().contains(CRYSTAL_TAG) ? " (in the fight)" : ""));
+                                                          e -> e.getType() == EntityType.ENDER_CRYSTAL &&
+                                                               e.getScoreboardTags().contains(CRYSTAL_TAG))) {
+            debug("Loaded crystal: " + entity.getUniqueId());
             _crystals.add((EnderCrystal) entity);
         }
 
@@ -505,12 +505,10 @@ public class FightState implements Listener {
         }
 
         DragonBattle battle = world.getEnderDragonBattle();
-        if (battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
-            return;
-        }
-
         if (entity instanceof EnderCrystal) {
-            onCrystalSpawn((EnderCrystal) entity);
+            if (battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
+                onCrystalSpawn((EnderCrystal) entity);
+            }
         }
     }
 
@@ -649,9 +647,6 @@ public class FightState implements Listener {
         }
 
         if (_stageNumber != 0 && bossDied && _bosses.isEmpty()) {
-            // TODO: update the stage boss bar.
-            // TODO: consult the tracker rather than assuming there is only a
-            // single boss.
             if (_stageNumber == 10) {
                 // Just the dragon in stage 11.
                 debug("Beginning stage 11.");
