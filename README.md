@@ -164,6 +164,23 @@ There is currently one administrative command:
 
  * `/df stop` - stop the current dragon fight, removing all mobs and projectiles.
 
+ * `/df next` - Kill the current boss, skipping to the next stage.
+
+ * `/df list` - List all 10 stage titles and subtitles.
+
+ * `/df swap <from> <to>` - Swap two stages by stage number (1 to 10).
+
+ * `/df move <from> <to>` - Move stage `<from>` to stage `<to>` and shift in-between stages into the gap.
+
+ * `/df config <stage>` - Show the configuration of `<stage>` 1 to 10.
+ * `/df config <stage> barcolor <color>` - Configure stage bar color.
+   * Note that Minecraft only allows [7 boss bar colors](https://hub.spigotmc.org/javadocs/spigot/org/bukkit/boss/BarColor.html),
+     `BLUE`, `GREEN`, `PINK`, `PURPLE`, `RED`, `WHITE` and `YELLOW`.
+ * `/df config <stage> title <text>` - Configure stage title.
+ * `/df config <stage> subtitle <text>` - Configure stage subtitle.
+ * `/df config <stage> message <text>` - Configure stage message.
+   * Titles, subtitles and messages accept `&c`-style [formatting codes](https://minecraft.gamepedia.com/Formatting_codes#Color_codes).
+
 There is also a technical administrator command:
 
  * `/dragonfight reload` - reload the plugin configuration.
