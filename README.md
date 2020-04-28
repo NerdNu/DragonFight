@@ -162,6 +162,10 @@ they:
 
 There is currently one administrative command:
 
+ * `/df help` - Show help for the `/df` command. Equivalent to `/help /df`.
+  
+ * `/df info` - Show information about the current fight: stage number, owner, boss health and dragon health.
+ 
  * `/df stop` - stop the current dragon fight, removing all mobs and projectiles.
 
  * `/df next` - Kill the current boss, skipping to the next stage.

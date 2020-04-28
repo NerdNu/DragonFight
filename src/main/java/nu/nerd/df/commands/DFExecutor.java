@@ -40,6 +40,11 @@ public class DFExecutor extends ExecutorBase {
             return false;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("info")) {
+            DragonFight.FIGHT.info(sender);
+            return true;
+        }
+
         if (args.length == 1 && args[0].equalsIgnoreCase("stop")) {
             DragonFight.FIGHT.stop(sender);
             return true;

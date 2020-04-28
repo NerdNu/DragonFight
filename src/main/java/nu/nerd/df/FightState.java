@@ -11,6 +11,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
@@ -95,12 +96,61 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Return the world where the dragon fight occurs.
+     * 
+     * @return the world where the dragon fight occurs.
+     */
+    public static World getFightWorld() {
+        return Bukkit.getWorld(FIGHT_WORLD);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Show information about the current fight: stage, owner, boss health and
+     * dragon health.
+     * 
+     * @param sender the command sender, for messages.
+     */
+    public void info(CommandSender sender) {
+        sender.sendMessage(ChatColor.DARK_PURPLE + "The current fight stage is " +
+                           ChatColor.LIGHT_PURPLE + _stageNumber + ChatColor.DARK_PURPLE + ".");
+        if (_stageNumber == 0) {
+            return;
+        }
+
+        // Stage number is 1 to 11 from here on.
+        OfflinePlayer fightOwner = (DragonFight.CONFIG.FIGHT_OWNER == null) ? null : Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER);
+        if (fightOwner == null) {
+            // This shouldn't ever happen. :P
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The final will be given to a randomly selected player.");
+        } else {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The final drops are owned by " +
+                               ChatColor.LIGHT_PURPLE + fightOwner.getName() + ChatColor.DARK_PURPLE + ".");
+        }
+
+        if (_stageNumber >= 1 && _stageNumber <= 10) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The current total boss health is " +
+                               ChatColor.LIGHT_PURPLE + String.format("%.1f", getTotalBossHealth()) +
+                               ChatColor.DARK_PURPLE + " out of " +
+                               ChatColor.LIGHT_PURPLE + DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH + ".");
+        }
+
+        DragonBattle battle = getFightWorld().getEnderDragonBattle();
+        EnderDragon dragon = battle.getEnderDragon();
+        sender.sendMessage(ChatColor.DARK_PURPLE + "The current dragon health is " +
+                           ChatColor.LIGHT_PURPLE + dragon.getHealth() +
+                           ChatColor.DARK_PURPLE + " out of " +
+                           ChatColor.LIGHT_PURPLE + dragon.getMaxHealth() + ".");
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Stop the current fight and clean up mobs and projectiles.
      * 
      * @param sender the command sender, for messages.
      */
     public void stop(CommandSender sender) {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
         if (dragon != null) {
@@ -151,7 +201,7 @@ public class FightState implements Listener {
      * projectiles, and skip to the next stage.
      */
     public void nextStage(CommandSender sender) {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getEnderDragon() == null) {
             sender.sendMessage(ChatColor.RED + "You need to spawn a dragon with end crystals first!");
@@ -296,7 +346,7 @@ public class FightState implements Listener {
      * chunks on startup.
      */
     protected void discoverFightState() {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
 
         // Preload chunks to ensure we find the crystals.
         int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
@@ -801,7 +851,7 @@ public class FightState implements Listener {
 
         // If the player is placing a spawning crystal when 3 already exist
         // and there is no dragon, then he is the fight owner.
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         List<Entity> dragonSpawnCrystals = getDragonSpawnCrystals();
         if (battle.getEnderDragon() == null &&
@@ -934,7 +984,7 @@ public class FightState implements Listener {
      * @return all dragon-spawning crystals currently in existence.
      */
     protected static List<Entity> getDragonSpawnCrystals() {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 10, 3)
         .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
                               isDragonSpawnCrystalLocation(e.getLocation()))
@@ -946,7 +996,7 @@ public class FightState implements Listener {
      * Reconfigure the dragon's boss bar to not darken the sky or create fog.
      */
     protected void reconfigureDragonBossBar() {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getBossBar() != null) {
             battle.getBossBar().removeFlag(BarFlag.DARKEN_SKY);
@@ -1039,7 +1089,7 @@ public class FightState implements Listener {
      * location to spawn the boss, moderate them hard.
      */
     protected static Location getBossSpawnLocation() {
-        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = getFightWorld();
         double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
         double angle = Util.random() * 2.0 * Math.PI;
         double x = range * Math.cos(angle);
@@ -1100,7 +1150,7 @@ public class FightState implements Listener {
      * @return nearby players.
      */
     protected Set<Player> getNearbyPlayers() {
-        World world = Bukkit.getWorld(FIGHT_WORLD);
+        World world = getFightWorld();
         return world.getPlayers().stream()
         .filter(p -> getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
         .collect(Collectors.toSet());
@@ -1135,10 +1185,18 @@ public class FightState implements Listener {
         getNearbyPlayers().forEach(p -> _bossBar.addPlayer(p));
 
         // Update the bar progress according to total remaining boss health.
-        double totalBossHealth = _bosses.stream()
-        .reduce(0.0, (sum, b) -> sum + b.getHealth(), (h1, h2) -> h1 + h2);
-        double newProgress = totalBossHealth / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
+        double newProgress = getTotalBossHealth() / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
         _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return the total health of all extant bosses.
+     * 
+     * @return the total health of all extant bosses.
+     */
+    public double getTotalBossHealth() {
+        return _bosses.stream().reduce(0.0, (sum, b) -> sum + b.getHealth(), (h1, h2) -> h1 + h2);
     }
 
     // ------------------------------------------------------------------------
