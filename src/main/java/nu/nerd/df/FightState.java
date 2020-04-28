@@ -232,6 +232,9 @@ public class FightState implements Listener {
             // Show a fixed stage 11 title for the dragon.
             getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
                                                         ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
+
+            // The dragon was set invulnerable in stage 1.
+            battle.getEnderDragon().setInvulnerable(false);
         }
     }
 
@@ -840,6 +843,10 @@ public class FightState implements Listener {
      * crystals still exist and the RespawnPhase is NONE.
      */
     protected void onDragonSpawn(EnderDragon dragon) {
+        // The dragon is invulnerable for stages 1 through 10.
+        // NOTE: creative mode trumps invulnerability.
+        dragon.setInvulnerable(true);
+
         // debug("Dragon spawned. Spawning crystals: " +
         // getDragonSpawnCrystals());
         // debug("Respawn phase: " +
@@ -960,6 +967,11 @@ public class FightState implements Listener {
         // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             ++_stageNumber;
+            if (_stageNumber == 11) {
+                DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+                battle.getEnderDragon().setInvulnerable(false);
+            }
+
             Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
             debug("Beginning stage: " + _stageNumber);
 
