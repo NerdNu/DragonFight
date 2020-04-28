@@ -14,7 +14,6 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarFlag;
@@ -96,16 +95,6 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Return the world where the dragon fight occurs.
-     * 
-     * @return the world where the dragon fight occurs.
-     */
-    public static World getFightWorld() {
-        return Bukkit.getWorld(FIGHT_WORLD);
-    }
-
-    // ------------------------------------------------------------------------
-    /**
      * Show information about the current fight: stage, owner, boss health and
      * dragon health.
      * 
@@ -135,7 +124,7 @@ public class FightState implements Listener {
                                ChatColor.LIGHT_PURPLE + DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH + ".");
         }
 
-        DragonBattle battle = getFightWorld().getEnderDragonBattle();
+        DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
         sender.sendMessage(ChatColor.DARK_PURPLE + "The current dragon health is " +
                            ChatColor.LIGHT_PURPLE + dragon.getHealth() +
@@ -150,7 +139,7 @@ public class FightState implements Listener {
      * @param sender the command sender, for messages.
      */
     public void stop(CommandSender sender) {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
         if (dragon != null) {
@@ -174,7 +163,7 @@ public class FightState implements Listener {
         int projectileCount = 0;
         int mobCount = 0;
         for (Entity entity : fightWorld.getEntities()) {
-            if (entity.isValid() && hasTagOrGroup(entity, ENTITY_TAG)) {
+            if (entity.isValid() && DragonUtil.hasTagOrGroup(entity, ENTITY_TAG)) {
                 entity.remove();
                 if (entity instanceof Projectile) {
                     ++projectileCount;
@@ -201,7 +190,7 @@ public class FightState implements Listener {
      * projectiles, and skip to the next stage.
      */
     public void nextStage(CommandSender sender) {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getEnderDragon() == null) {
             sender.sendMessage(ChatColor.RED + "You need to spawn a dragon with end crystals first!");
@@ -217,13 +206,13 @@ public class FightState implements Listener {
         int supportCount = 0;
         for (Entity entity : fightWorld.getEntities()) {
             if (entity.isValid()) {
-                if (entity instanceof Projectile && hasTagOrGroup(entity, ENTITY_TAG)) {
+                if (entity instanceof Projectile && DragonUtil.hasTagOrGroup(entity, ENTITY_TAG)) {
                     entity.remove();
                     ++projectileCount;
-                } else if (hasTagOrGroup(entity, BOSS_TAG)) {
+                } else if (DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
                     entity.remove();
                     ++bossCount;
-                } else if (hasTagOrGroup(entity, SUPPORT_TAG)) {
+                } else if (DragonUtil.hasTagOrGroup(entity, SUPPORT_TAG)) {
                     entity.remove();
                     ++supportCount;
                 }
@@ -258,85 +247,6 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Return true if an entity has the specified scoreboard tag or BeastMaster
-     * group.
-     * 
-     * @param entity the entity.
-     * @param tag the tag or group to look for.
-     * @return true if the entity has the tag or group.
-     */
-    public static boolean hasTagOrGroup(Entity entity, String tag) {
-        if (entity.getScoreboardTags().contains(tag)) {
-            return true;
-        }
-
-        MobType mobType = BeastMaster.getMobType(entity);
-        if (mobType != null) {
-            @SuppressWarnings("unchecked")
-            Set<String> groups = (Set<String>) mobType.getDerivedProperty("groups").getValue();
-            return groups != null && groups.contains(tag);
-        }
-
-        return false;
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Return true if the specified world is the one where the dragon fight can
-     * occur.
-     * 
-     * @param world the world.
-     * @return true if the specified world is the one where the dragon fight can
-     *         occur.
-     */
-    public static boolean isFightWorld(World world) {
-        return world.getEnvironment() == Environment.THE_END
-               && world.getName().equals(FIGHT_WORLD);
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Return the magnitude of the X and Z components of location, i.e. the
-     * distance between loc and the world origin in the XZ plane (ignoring Y
-     * coordinate).
-     * 
-     * @param loc the location.
-     * @return sqrt(x^2 + z^2).
-     */
-    public static double getMagnitude2D(Location loc) {
-        return Math.sqrt(loc.getX() * loc.getX() + loc.getZ() * loc.getZ());
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Return true if the specified location is on the circle where the centre
-     * of the obsidian pillars are placed.
-     * 
-     * The pillars about placed in a circle about 40 blocks from (0,0). The
-     * largest pillars have a radius of 5 blocks, including the centre block, so
-     * ensure that we block placements up to 6 blocks away (6/40 = 0.15).
-     * 
-     * Note that:
-     * <ul>
-     * <li>This method assumes that the world has already been confirmed to be
-     * the fight world.</li>
-     * <li>This method doesn't care what the angle of the location is from north
-     * (or whatever reference).</li>
-     * <li>It's quite tricky to be more precise than this about detecting the
-     * spawning of crystals on pillars, because when the crystal on the pillar
-     * spawns, the block underneath it comes back as AIR, not BEDROCK.</li>
-     * </ul>
-     * 
-     * @param loc the location.
-     * @return if the location is about the right range from the origin of the
-     *         world to be the centre of a pillar.
-     */
-    public static boolean isOnPillarCircle(Location loc) {
-        return Math.abs(getMagnitude2D(loc) - PILLAR_CIRCLE_RADIUS) < 0.15 * PILLAR_CIRCLE_RADIUS;
-    }
-
-    // ------------------------------------------------------------------------
-    /**
      * When the plugin initialises, infer the state of the fight, including the
      * stage number, based on the presence of crystals, the dragon and bosses.
      * 
@@ -346,7 +256,7 @@ public class FightState implements Listener {
      * chunks on startup.
      */
     protected void discoverFightState() {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
 
         // Preload chunks to ensure we find the crystals.
         int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
@@ -363,7 +273,7 @@ public class FightState implements Listener {
                         entity.setInvulnerable(true);
                     } else if (entity instanceof LivingEntity) {
                         // Find bosses within the discoverable range.
-                        if (hasTagOrGroup(entity, BOSS_TAG)) {
+                        if (DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
                             _bosses.add((LivingEntity) entity);
                         }
                     }
@@ -378,7 +288,7 @@ public class FightState implements Listener {
             // The difference between stage 10 and 11 is that in 11 there are no
             // boss mobs.
             for (Entity entity : fightWorld.getEntities()) {
-                if (entity.isValid() && hasTagOrGroup(entity, BOSS_TAG)) {
+                if (entity.isValid() && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
                     return;
                 }
             }
@@ -548,7 +458,7 @@ public class FightState implements Listener {
     protected void onEntitySpawn(EntitySpawnEvent event) {
         Location loc = event.getLocation();
         World world = loc.getWorld();
-        if (!isFightWorld(world)) {
+        if (!DragonUtil.isFightWorld(world)) {
             return;
         }
 
@@ -560,7 +470,7 @@ public class FightState implements Listener {
         }
 
         // Track the bosses.
-        if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+        if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
             _bosses.add((LivingEntity) entity);
         }
 
@@ -577,7 +487,7 @@ public class FightState implements Listener {
 
             // Register and protect crystals spawned on the pillars.
             if (battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
-                isOnPillarCircle(entity.getLocation())) {
+                DragonUtil.isOnPillarCircle(entity.getLocation())) {
                 onPillarCrystalSpawn((EnderCrystal) entity);
             }
         }
@@ -589,12 +499,12 @@ public class FightState implements Listener {
      */
     @EventHandler()
     protected void onChunkLoad(ChunkLoadEvent event) {
-        if (!isFightWorld(event.getWorld())) {
+        if (!DragonUtil.isFightWorld(event.getWorld())) {
             return;
         }
 
         for (Entity entity : event.getChunk().getEntities()) {
-            if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+            if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
                 _bosses.add((LivingEntity) entity);
             }
         }
@@ -606,12 +516,12 @@ public class FightState implements Listener {
      */
     @EventHandler()
     protected void onChunkUnload(ChunkUnloadEvent event) {
-        if (!isFightWorld(event.getWorld())) {
+        if (!DragonUtil.isFightWorld(event.getWorld())) {
             return;
         }
 
         for (Entity entity : event.getChunk().getEntities()) {
-            if (entity instanceof LivingEntity && hasTagOrGroup(entity, BOSS_TAG)) {
+            if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
                 _bosses.remove(entity);
             }
         }
@@ -626,7 +536,7 @@ public class FightState implements Listener {
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     protected void onProjectileLaunch(ProjectileLaunchEvent event) {
-        if (!isFightWorld(event.getEntity().getWorld())) {
+        if (!DragonUtil.isFightWorld(event.getEntity().getWorld())) {
             return;
         }
 
@@ -634,7 +544,7 @@ public class FightState implements Listener {
         ProjectileSource shooter = projectile.getShooter();
         if (shooter instanceof Entity) {
             Entity shooterEntity = (Entity) shooter;
-            if (hasTagOrGroup(shooterEntity, ENTITY_TAG)) {
+            if (DragonUtil.hasTagOrGroup(shooterEntity, ENTITY_TAG)) {
                 projectile.getScoreboardTags().add(ENTITY_TAG);
             }
         }
@@ -664,14 +574,14 @@ public class FightState implements Listener {
         Entity entity = event.getEntity();
         // debug("onEntityDamageEarly() " + event.getEntityType() +
         // Util.formatLocation(entity.getLocation()));
-        if (!isFightWorld(entity.getWorld())) {
+        if (!DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
         if (entity instanceof EnderCrystal) {
             if (_crystals.contains(entity) ||
-                hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
-                hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
+                DragonUtil.hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
+                DragonUtil.hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
                 event.setCancelled(true);
                 // debug("Prevented end crystal damage at " +
                 // Util.formatLocation(entity.getLocation()));
@@ -692,12 +602,12 @@ public class FightState implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onEntityDamageLate(EntityDamageEvent event) {
         Entity entity = event.getEntity();
-        if (!isFightWorld(entity.getWorld())) {
+        if (!DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
         // Update the "last seen time" of bosses and update boss bar.
-        if (hasTagOrGroup(entity, BOSS_TAG)) {
+        if (DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
             Long now = System.currentTimeMillis();
             entity.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
 
@@ -724,12 +634,12 @@ public class FightState implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onEntityExplode(EntityExplodeEvent event) {
         Entity entity = event.getEntity();
-        if (entity.getType() != EntityType.ENDER_CRYSTAL || !isFightWorld(entity.getWorld())) {
+        if (entity.getType() != EntityType.ENDER_CRYSTAL || !DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
-        if (hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
-            hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
+        if (DragonUtil.hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
+            DragonUtil.hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
 
             debug("Prevented end crystal explosion at " + Util.formatLocation(entity.getLocation()));
             event.setCancelled(true);
@@ -748,11 +658,11 @@ public class FightState implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onEntityCombust(EntityCombustEvent event) {
         Entity entity = event.getEntity();
-        if (entity.getType() != EntityType.ENDER_CRYSTAL || !isFightWorld(entity.getWorld())) {
+        if (entity.getType() != EntityType.ENDER_CRYSTAL || !DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
-        if (hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG)) {
+        if (DragonUtil.hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG)) {
             event.setCancelled(true);
             Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> entity.setFireTicks(1), 1);
             // debug("Prevent combustion of " + event.getEntityType() +
@@ -767,7 +677,7 @@ public class FightState implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     protected void onEntityDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
-        if (!isFightWorld(entity.getWorld())) {
+        if (!DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
@@ -778,7 +688,7 @@ public class FightState implements Listener {
             return;
         }
 
-        boolean bossDied = hasTagOrGroup(entity, BOSS_TAG);
+        boolean bossDied = DragonUtil.hasTagOrGroup(entity, BOSS_TAG);
         if (bossDied) {
             _bosses.remove(entity);
         }
@@ -801,13 +711,13 @@ public class FightState implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
     protected void onEntityPortal(EntityPortalEvent event) {
         Entity entity = event.getEntity();
-        if (!isFightWorld(entity.getWorld())) {
+        if (!DragonUtil.isFightWorld(entity.getWorld())) {
             return;
         }
 
         MobType mobType = BeastMaster.getMobType(entity);
         if (mobType != null) {
-            if (hasTagOrGroup(entity, ENTITY_TAG)) {
+            if (DragonUtil.hasTagOrGroup(entity, ENTITY_TAG)) {
                 event.setCancelled(true);
                 returnMobToBossSpawn(mobType, entity);
             }
@@ -845,13 +755,13 @@ public class FightState implements Listener {
         }
 
         Location blockLoc = block.getLocation();
-        if (!isFightWorld(blockLoc.getWorld())) {
+        if (!DragonUtil.isFightWorld(blockLoc.getWorld())) {
             return;
         }
 
         // If the player is placing a spawning crystal when 3 already exist
         // and there is no dragon, then he is the fight owner.
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         List<Entity> dragonSpawnCrystals = getDragonSpawnCrystals();
         if (battle.getEnderDragon() == null &&
@@ -877,7 +787,7 @@ public class FightState implements Listener {
         // Prevent crystals being placed on pillars during the summoning
         // phase (when we tag them as relevant).
         if (battle != null && battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
-            isOnPillarCircle(blockLoc)) {
+            DragonUtil.isOnPillarCircle(blockLoc)) {
             event.setCancelled(true);
             debug("Cancelled " + event.getPlayer().getName() + " placing END_CRYSTAL at " + Util.formatLocation(blockLoc));
         }
@@ -984,7 +894,7 @@ public class FightState implements Listener {
      * @return all dragon-spawning crystals currently in existence.
      */
     protected static List<Entity> getDragonSpawnCrystals() {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 10, 3)
         .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
                               isDragonSpawnCrystalLocation(e.getLocation()))
@@ -996,7 +906,7 @@ public class FightState implements Listener {
      * Reconfigure the dragon's boss bar to not darken the sky or create fog.
      */
     protected void reconfigureDragonBossBar() {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getBossBar() != null) {
             battle.getBossBar().removeFlag(BarFlag.DARKEN_SKY);
@@ -1068,7 +978,7 @@ public class FightState implements Listener {
 
             // Compute the total health for the stage's boss bar.
             DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = results.getMobs().stream()
-            .filter(mob -> hasTagOrGroup(mob, BOSS_TAG))
+            .filter(mob -> DragonUtil.hasTagOrGroup(mob, BOSS_TAG))
             .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
 
             // Show the title.
@@ -1089,7 +999,7 @@ public class FightState implements Listener {
      * location to spawn the boss, moderate them hard.
      */
     protected static Location getBossSpawnLocation() {
-        World fightWorld = getFightWorld();
+        World fightWorld = DragonUtil.getFightWorld();
         double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
         double angle = Util.random() * 2.0 * Math.PI;
         double x = range * Math.cos(angle);
@@ -1150,9 +1060,9 @@ public class FightState implements Listener {
      * @return nearby players.
      */
     protected Set<Player> getNearbyPlayers() {
-        World world = getFightWorld();
+        World world = DragonUtil.getFightWorld();
         return world.getPlayers().stream()
-        .filter(p -> getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
+        .filter(p -> DragonUtil.getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
         .collect(Collectors.toSet());
     }
 
@@ -1251,7 +1161,7 @@ public class FightState implements Listener {
 
                 // Enforce "last seen" and position limits on bosses.
                 Location loc = boss.getLocation();
-                if (loc.getY() < MIN_BOSS_Y || getMagnitude2D(loc) > BOSS_RADIUS) {
+                if (loc.getY() < MIN_BOSS_Y || DragonUtil.getMagnitude2D(loc) > BOSS_RADIUS) {
                     MobType mobType = BeastMaster.getMobType(boss);
                     debug("Returning " + mobType.getId() + " " +
                           boss.getUniqueId().toString().substring(0, 8) + " to the arena due to location.");
@@ -1264,13 +1174,6 @@ public class FightState implements Listener {
     } // class TrackerTask
 
     // ------------------------------------------------------------------------
-    /**
-     * The World where the fight occurs.
-     * 
-     * It could be configurable, but for now is constant.
-     */
-    private static final String FIGHT_WORLD = "world_the_end";
-
     /**
      * Tag applied to pillar end crystals on spawn so we know which ones are in
      * the fight on restart.
@@ -1304,11 +1207,6 @@ public class FightState implements Listener {
      * Number of ticks to wait before starting the next stage.
      */
     private static int STAGE_START_DELAY = 150;
-
-    /**
-     * The approximate radius of the circle of pillars.
-     */
-    private static final double PILLAR_CIRCLE_RADIUS = 40.0;
 
     /**
      * Radius in blocks on the XZ plane within which players are considered to
