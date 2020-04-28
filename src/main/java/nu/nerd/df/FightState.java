@@ -1,6 +1,5 @@
 package nu.nerd.df;
 
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -9,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -36,8 +36,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
+import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -50,7 +52,6 @@ import org.bukkit.metadata.MetadataValue;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
-import org.bukkit.util.BoundingBox;
 
 import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.Drop;
@@ -128,7 +129,8 @@ public class FightState implements Listener {
                 if (entity instanceof Projectile) {
                     ++projectileCount;
                 } else {
-                    // Note: Crystals are tagged CRYSTAL_TAG, not ENTITY_TAG.
+                    // Note: Crystals are tagged PILLAR_CRYSTAL_TAG, not
+                    // ENTITY_TAG.
                     ++mobCount;
                 }
             }
@@ -260,7 +262,9 @@ public class FightState implements Listener {
      * Return true if the specified location is on the circle where the centre
      * of the obsidian pillars are placed.
      * 
-     * The pillars about placed in a circle about 40 blocks from (0,0).
+     * The pillars about placed in a circle about 40 blocks from (0,0). The
+     * largest pillars have a radius of 5 blocks, including the centre block, so
+     * ensure that we block placements up to 6 blocks away (6/40 = 0.15).
      * 
      * Note that:
      * <ul>
@@ -268,6 +272,9 @@ public class FightState implements Listener {
      * the fight world.</li>
      * <li>This method doesn't care what the angle of the location is from north
      * (or whatever reference).</li>
+     * <li>It's quite tricky to be more precise than this about detecting the
+     * spawning of crystals on pillars, because when the crystal on the pillar
+     * spawns, the block underneath it comes back as AIR, not BEDROCK.</li>
      * </ul>
      * 
      * @param loc the location.
@@ -275,7 +282,7 @@ public class FightState implements Listener {
      *         world to be the centre of a pillar.
      */
     public static boolean isOnPillarCircle(Location loc) {
-        return Math.abs(getMagnitude2D(loc) - PILLAR_CIRCLE_RADIUS) < 0.1 * PILLAR_CIRCLE_RADIUS;
+        return Math.abs(getMagnitude2D(loc) - PILLAR_CIRCLE_RADIUS) < 0.15 * PILLAR_CIRCLE_RADIUS;
     }
 
     // ------------------------------------------------------------------------
@@ -290,19 +297,33 @@ public class FightState implements Listener {
      */
     protected void discoverFightState() {
         World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
-        double radius = PILLAR_CIRCLE_RADIUS * 1.1;
-        Location origin = new Location(fightWorld, 0, 64, 0);
-        for (Entity entity : fightWorld.getNearbyEntities(origin, radius, 64, radius,
-                                                          e -> e.getType() == EntityType.ENDER_CRYSTAL &&
-                                                               e.getScoreboardTags().contains(CRYSTAL_TAG))) {
-            debug("Loaded crystal: " + entity.getUniqueId());
-            _crystals.add((EnderCrystal) entity);
+
+        // Preload chunks to ensure we find the crystals.
+        int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
+        for (int x = -chunkRange; x <= chunkRange; ++x) {
+            for (int z = -chunkRange; z <= chunkRange; ++z) {
+                Chunk chunk = fightWorld.getChunkAt(x, z);
+                for (Entity entity : chunk.getEntities()) {
+                    if (entity instanceof EnderCrystal &&
+                        entity.getScoreboardTags().contains(PILLAR_CRYSTAL_TAG)) {
+                        debug("Loaded crystal " + entity.getUniqueId() + " at " + Util.formatLocation(entity.getLocation()));
+                        _crystals.add((EnderCrystal) entity);
+                        // In case the restart happened immediately after the
+                        // crystal spawned.
+                        entity.setInvulnerable(true);
+                    } else if (entity instanceof LivingEntity) {
+                        // Find bosses within the discoverable range.
+                        if (hasTagOrGroup(entity, BOSS_TAG)) {
+                            _bosses.add((LivingEntity) entity);
+                        }
+                    }
+                }
+            }
         }
 
         // Work out what stage we're in.
         DragonBattle battle = fightWorld.getEnderDragonBattle();
-        _stageNumber = (battle.getEnderDragon() == null) ? 0
-                                                         : 10 - _crystals.size();
+        _stageNumber = (battle.getEnderDragon() == null) ? 0 : 10 - _crystals.size();
         if (_stageNumber == 10) {
             // The difference between stage 10 and 11 is that in 11 there are no
             // boss mobs.
@@ -314,17 +335,6 @@ public class FightState implements Listener {
             _stageNumber = 11;
         }
 
-        // Find bosses within the discoverable range.
-        BoundingBox box = new BoundingBox(-TRACKED_RADIUS, 0, -TRACKED_RADIUS,
-                                          TRACKED_RADIUS, 256, TRACKED_RADIUS);
-        Collection<Entity> entities = fightWorld.getNearbyEntities(box);
-        for (Entity entity : entities) {
-            if (entity instanceof LivingEntity) {
-                if (hasTagOrGroup(entity, BOSS_TAG)) {
-                    _bosses.add((LivingEntity) entity);
-                }
-            }
-        }
         debug("Discovered bosses: " + _bosses.size());
     }
 
@@ -482,7 +492,7 @@ public class FightState implements Listener {
      * Track any mobs that spawn with the boss group.
      * 
      * Handle end crystals spawns during the pillar-summoning phase only with
-     * {@link #onCrystalSpawn(EnderCrystal)}.
+     * {@link #onPillarCrystalSpawn(EnderCrystal)}.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     protected void onEntitySpawn(EntitySpawnEvent event) {
@@ -506,8 +516,19 @@ public class FightState implements Listener {
 
         DragonBattle battle = world.getEnderDragonBattle();
         if (entity instanceof EnderCrystal) {
-            if (battle.getRespawnPhase() != RespawnPhase.SUMMONING_PILLARS) {
-                onCrystalSpawn((EnderCrystal) entity);
+            // Make the summoning crystals glowing and invulnerable to prevent
+            // the player from initiating the fight and then destroying the
+            // spawning crystals.
+            if (isDragonSpawnCrystalLocation(loc)) {
+                entity.setInvulnerable(true);
+                entity.setGlowing(true);
+                entity.getScoreboardTags().add(SPAWNING_CRYSTAL_TAG);
+            }
+
+            // Register and protect crystals spawned on the pillars.
+            if (battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
+                isOnPillarCircle(entity.getLocation())) {
+                onPillarCrystalSpawn((EnderCrystal) entity);
             }
         }
     }
@@ -571,22 +592,39 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Protect the End Crystals on the pillars, since setInvulnerable(true) is
-     * currently broken, apparently.
+     * Protect the End Crystals on the pillars and the four crystals that spawn
+     * the dragon.
+     * 
+     * I had some problems with setInvulnerable(); it doesn't <i>just work</i>
+     * on the 10 pillar crystals. If you think you can just set them
+     * invulnerable when they spawn well no, that would be way too simple. What
+     * I found was that vanilla Minecraft protects these crystals <i>until</i>
+     * the dragon spawns. Probably behind the scenes vanilla code is then
+     * setting them back to vulnerable after that. So, if you then set the
+     * crystals invulnerable in the next tick <i>after the dragon is spawned</i>
+     * the crystals will be protected. So this crystal protection code is here
+     * partly for curiosity and partly to fend off any race condition in the
+     * transition.
      * 
      * This event needs to be processed before e.g. SafeCrystals drops a
      * crystal.
      */
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onEntityDamageEarly(EntityDamageEvent event) {
         Entity entity = event.getEntity();
+        // debug("onEntityDamageEarly() " + event.getEntityType() +
+        // Util.formatLocation(entity.getLocation()));
         if (!isFightWorld(entity.getWorld())) {
             return;
         }
 
         if (entity instanceof EnderCrystal) {
-            if (_crystals.contains(entity)) {
+            if (_crystals.contains(entity) ||
+                hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
+                hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
                 event.setCancelled(true);
+                // debug("Prevented end crystal damage at " +
+                // Util.formatLocation(entity.getLocation()));
             }
             return;
         }
@@ -620,6 +658,55 @@ public class FightState implements Listener {
                 double newProgress = _bossBar.getProgress() - healthLoss / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
                 _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Prevent fight-relevant crystals from exploding.
+     * 
+     * These will be the pillar crystals, or the dragon spawning ones. We can't
+     * rely on checking for bedrock under them because of pistons.
+     *
+     * I haven't actually seen this code being called, but on the other hand it
+     * doesn't hurt so it's going to stay for now.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        Entity entity = event.getEntity();
+        if (entity.getType() != EntityType.ENDER_CRYSTAL || !isFightWorld(entity.getWorld())) {
+            return;
+        }
+
+        if (hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
+            hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
+
+            debug("Prevented end crystal explosion at " + Util.formatLocation(entity.getLocation()));
+            event.setCancelled(true);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Prevent pillar crystals from being set on fire.
+     * 
+     * This is easier said than done. You can cancel the event, or set the fire
+     * ticks after the fact to be small so that the fire extinguishes itself
+     * quickly, or both. Either way, the current 1.15.2 client just shows the
+     * crystal on fire until you relog.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEntityCombust(EntityCombustEvent event) {
+        Entity entity = event.getEntity();
+        if (entity.getType() != EntityType.ENDER_CRYSTAL || !isFightWorld(entity.getWorld())) {
+            return;
+        }
+
+        if (hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG)) {
+            event.setCancelled(true);
+            Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> entity.setFireTicks(1), 1);
+            // debug("Prevent combustion of " + event.getEntityType() +
+            // " at " + Util.formatLocation(event.getEntity().getLocation()));
         }
     }
 
@@ -686,25 +773,63 @@ public class FightState implements Listener {
      * that phase are because of the dragon fight, and not due to players.
      * EntitySpawnEvent doesn't give us a spawn reason that would disambiguate
      * the two.
+     * 
+     * Also, prevent players from placing crystals in arbitrary locations on the
+     * end portal frame bedrock. Crystals can only be placed in the four
+     * designated "dragon spawning crystal" locations. The player gets a message
+     * about that. Also, once the dragon is summoned, or summoning has started,
+     * don't allow extra crystals in those four locations until the dragon is
+     * dead.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     protected void onPlayerInteract(PlayerInteractEvent event) {
         Block block = event.getClickedBlock();
-        if (event.getMaterial() != Material.END_CRYSTAL
-            || event.getAction() != Action.RIGHT_CLICK_BLOCK
-            || block.getType() != Material.OBSIDIAN) {
+        // debug("Clicked " + block.getType() +
+        // " at " + Util.formatLocation(block.getLocation()) +
+        // " action " + event.getAction() + " hand " + event.getHand() +
+        // " with " + event.getMaterial());
+        if (event.getMaterial() != Material.END_CRYSTAL ||
+            event.getAction() != Action.RIGHT_CLICK_BLOCK ||
+            block.getType() != Material.BEDROCK) {
             return;
         }
 
-        Location loc = block.getLocation();
-        if (!isFightWorld(loc.getWorld()) || !isOnPillarCircle(loc)) {
+        Location blockLoc = block.getLocation();
+        if (!isFightWorld(blockLoc.getWorld())) {
             return;
         }
 
-        DragonBattle battle = loc.getWorld().getEnderDragonBattle();
-        if (battle != null && battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS) {
+        // If the player is placing a spawning crystal when 3 already exist
+        // and there is no dragon, then he is the fight owner.
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        List<Entity> dragonSpawnCrystals = getDragonSpawnCrystals();
+        if (battle.getEnderDragon() == null &&
+            isDragonSpawnCrystalLocation(blockLoc) &&
+            dragonSpawnCrystals.size() == 3) {
+            debug("The dragon was spawned by: " + event.getPlayer().getName());
+            DragonFight.CONFIG.FIGHT_OWNER = event.getPlayer().getUniqueId();
+        }
+
+        // Restrict placement of crystals on the end portal frame.
+        Player player = event.getPlayer();
+        if (isDragonSpawnCrystalLocation(blockLoc)) {
+            if (battle != null && (battle.getEnderDragon() != null ||
+                                   battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS)) {
+                player.sendMessage(ChatColor.DARK_PURPLE + "You can't place more end crystals until the dragon is dead!");
+                event.setCancelled(true);
+            }
+        } else {
+            player.sendMessage(ChatColor.DARK_PURPLE + "You can't place crystals there!");
             event.setCancelled(true);
-            debug("Cancelled " + event.getPlayer().getName() + " placing END_CRYSTAL at " + Util.formatLocation(loc));
+        }
+
+        // Prevent crystals being placed on pillars during the summoning
+        // phase (when we tag them as relevant).
+        if (battle != null && battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
+            isOnPillarCircle(blockLoc)) {
+            event.setCancelled(true);
+            debug("Cancelled " + event.getPlayer().getName() + " placing END_CRYSTAL at " + Util.formatLocation(blockLoc));
         }
     }
 
@@ -714,7 +839,7 @@ public class FightState implements Listener {
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     protected void onEnderDragonChangePhase(EnderDragonChangePhaseEvent event) {
-        debug("Changing to dragon phase: " + event.getNewPhase());
+        // debug("Changing to dragon phase: " + event.getNewPhase());
     }
 
     // ------------------------------------------------------------------------
@@ -725,17 +850,18 @@ public class FightState implements Listener {
      * Tag crystals that were spawned by the dragon fight to prevent us from
      * mis-identifying player-placed crystals as relevant.
      */
-    protected void onCrystalSpawn(EnderCrystal crystal) {
+    protected void onPillarCrystalSpawn(EnderCrystal crystal) {
         _crystals.add(crystal);
 
         Location loc = crystal.getLocation();
         debug(crystal.getType() + " " + crystal.getUniqueId() +
               " spawned at " + Util.formatLocation(loc));
 
-        crystal.getScoreboardTags().add(CRYSTAL_TAG);
+        // Cannot set crystals invulnerable immediately.
         crystal.setGlowing(true);
+        crystal.getScoreboardTags().add(PILLAR_CRYSTAL_TAG);
 
-        // Currently doesn't do anything. Bug report needed:
+        // Doesn't do anything. See the doc comment for onEntityDamageEarly().
         crystal.setInvulnerable(true);
 
         playSound(loc, Sound.BLOCK_BEACON_POWER_SELECT);
@@ -749,15 +875,70 @@ public class FightState implements Listener {
      * We need to be careful about badly-timed restarts (as always). Since we
      * detect phases on reload by the absence of crystals, remove the crystal
      * before adding the boss.
+     * 
+     * Experimentation reveals that at the time the dragon spawns, the spawning
+     * crystals still exist and the RespawnPhase is NONE.
      */
     protected void onDragonSpawn(EnderDragon dragon) {
+        // debug("Dragon spawned. Spawning crystals: " +
+        // getDragonSpawnCrystals());
+        // debug("Respawn phase: " +
         if (_crystals.size() == 0) {
             debug("Dragon spawned but there were no ender crystals?!");
             return;
         }
 
+        // Setting the crystals invulnerable before the dragon spawns does not
+        // work. But Minecraft prevents them from being damaged.
+        // Cannot set them invulnerable this tick either.
+        for (EnderCrystal crystal : _crystals) {
+            Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN,
+                                               () -> crystal.setInvulnerable(true), 1);
+        }
         reconfigureDragonBossBar();
         nextStage();
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return true if the specified location is somewhere you would place an end
+     * crystal to spawn the dragon.
+     * 
+     * I'm not really sure how low the end portal frame can occur. In the
+     * current world, the frame is at Y56. This method doesn't care about the Y
+     * coordinate, as long as its clearly not bedrock down below Y6 (which only
+     * occurs in custom generated terrain).
+     * 
+     * @param loc the location of an end crystal that has just spawned on
+     *        obsidian.
+     * @return true if the specified location is somewhere you would place an
+     *         end crystal to spawn the dragon.
+     */
+    protected static boolean isDragonSpawnCrystalLocation(Location loc) {
+        if (loc.getY() < 6) {
+            return false;
+        }
+
+        int x = Math.abs(loc.getBlockX());
+        int z = Math.abs(loc.getBlockZ());
+        return ((x == 3 && z == 0) || (x == 0 && z == 3));
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return all (0-4) dragon-spawning crystals currently in existence.
+     * 
+     * The range on the Y coordinate is largeish because I'm not sure of the
+     * limits on the end portal spawn location.
+     * 
+     * @return all dragon-spawning crystals currently in existence.
+     */
+    protected static List<Entity> getDragonSpawnCrystals() {
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
+        return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 10, 3)
+        .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
+                              isDragonSpawnCrystalLocation(e.getLocation()))
+        .collect(Collectors.toList());
     }
 
     // ------------------------------------------------------------------------
@@ -784,8 +965,6 @@ public class FightState implements Listener {
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
-        // debug("Boss spawn location: " +
-        // Util.formatLocation(bossSpawnLocation));
 
         // Schedule random flickering of the crystal and searching of the beam.
         // Needs to be delayed slightly after the dragon spawn for beam to work.
@@ -803,6 +982,7 @@ public class FightState implements Listener {
 
         // Choose final beam target and spawn location.
         Location bossSpawnLocation = getBossSpawnLocation();
+        debug("Boss spawn location: " + Util.formatLocation(bossSpawnLocation));
 
         // End with the replaced crystal not glowing.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
@@ -859,13 +1039,13 @@ public class FightState implements Listener {
      * location to spawn the boss, moderate them hard.
      */
     protected static Location getBossSpawnLocation() {
-        World world = Bukkit.getWorld(FIGHT_WORLD);
+        World fightWorld = Bukkit.getWorld(FIGHT_WORLD);
         double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
         double angle = Util.random() * 2.0 * Math.PI;
         double x = range * Math.cos(angle);
         double z = range * Math.sin(angle);
         float yaw = 360 * (float) Math.random();
-        Location startLoc = new Location(world, x, ORIGIN_Y, z, yaw, 0f);
+        Location startLoc = new Location(fightWorld, x, ORIGIN_Y, z, yaw, 0f);
 
         // Find local highest block to stand on.
         Location loc = null;
@@ -885,7 +1065,7 @@ public class FightState implements Listener {
         }
 
         // If all else fails. Plonk it on the portal pillar.
-        return new Location(world, 0.5, ORIGIN_Y + 1, 0.5, yaw, 0f);
+        return new Location(fightWorld, 0.5, ORIGIN_Y + 1, 0.5, yaw, 0f);
     }
 
     // ------------------------------------------------------------------------
@@ -1034,10 +1214,16 @@ public class FightState implements Listener {
     private static final String FIGHT_WORLD = "world_the_end";
 
     /**
-     * Tag applied to end crystals on spawn so we know which ones are in the
-     * fight on restart.
+     * Tag applied to pillar end crystals on spawn so we know which ones are in
+     * the fight on restart.
      */
-    private static final String CRYSTAL_TAG = "df-crystal";
+    private static final String PILLAR_CRYSTAL_TAG = "df-crystal";
+
+    /**
+     * Tag applied to dragon-spawning end crystals on spawn so we know which
+     * ones are in the fight on restart.
+     */
+    private static final String SPAWNING_CRYSTAL_TAG = "df-spawning";
 
     /**
      * Tag applied to any entity spawned by the dragon fight: bosses, their
@@ -1107,7 +1293,7 @@ public class FightState implements Listener {
      * This needs to be larger than BOSS_RADIUS to account for the maximum
      * distance the mob could travel in PERIOD_TICKS.
      */
-    private static final double TRACKED_RADIUS = BOSS_RADIUS + 100.0;
+    private static final double TRACKED_RADIUS = BOSS_RADIUS + 80.0;
 
     /**
      * System.currentMillis() timestamp of the last time a boss took damage or

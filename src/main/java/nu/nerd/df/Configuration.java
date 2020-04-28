@@ -1,5 +1,7 @@
 package nu.nerd.df;
 
+import java.util.UUID;
+
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -18,6 +20,14 @@ public class Configuration {
      * a restart.
      */
     public double TOTAL_BOSS_MAX_HEALTH;
+
+    /**
+     * The UUID of the Player who placed the last end crystal to initiate the
+     * current fight.
+     * 
+     * That player receives the drops.
+     */
+    public UUID FIGHT_OWNER;
 
     // ------------------------------------------------------------------------
     /**
@@ -48,6 +58,12 @@ public class Configuration {
         DragonFight.PLUGIN.reloadConfig();
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
         TOTAL_BOSS_MAX_HEALTH = config.getDouble("state.total-boss-max-health");
+        try {
+            String text = config.getString("state.fight-owner");
+            FIGHT_OWNER = (text == null || text.isEmpty()) ? null : UUID.fromString(text);
+        } catch (IllegalArgumentException ex) {
+            FIGHT_OWNER = null;
+        }
 
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             getStage(stageNumber).load(getStageSection(stageNumber));
@@ -61,6 +77,7 @@ public class Configuration {
     public void save() {
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
         config.set("state.total-boss-max-health", TOTAL_BOSS_MAX_HEALTH);
+        config.set("state.fight-owner", (FIGHT_OWNER == null) ? null : FIGHT_OWNER.toString());
 
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             getStage(stageNumber).save(getStageSection(stageNumber));
