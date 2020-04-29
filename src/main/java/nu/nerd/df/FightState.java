@@ -227,14 +227,7 @@ public class FightState implements Listener {
         if (_stageNumber < 10) {
             nextStage();
         } else {
-            _stageNumber = 11;
-
-            // Show a fixed stage 11 title for the dragon.
-            getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
-                                                        ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
-
-            // The dragon was set invulnerable in stage 1.
-            battle.getEnderDragon().setInvulnerable(false);
+            startStage11();
         }
     }
 
@@ -296,6 +289,9 @@ public class FightState implements Listener {
                 }
             }
             _stageNumber = 11;
+
+            // Just to be sure, let's make the dragon invulnerable for stage 11.
+            battle.getEnderDragon().setInvulnerable(false);
         }
 
         debug("Discovered bosses: " + _bosses.size());
@@ -445,6 +441,23 @@ public class FightState implements Listener {
         if (configurationChanged) {
             BeastMaster.CONFIG.save();
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Show the stage 11 titles and set the dragon vulnerable again.
+     */
+    protected void startStage11() {
+        debug("Beginning stage 11.");
+        _stageNumber = 11;
+
+        // Show a fixed stage 11 title for the dragon.
+        getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
+                                                    ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
+
+        // The dragon was set invulnerable in stage 1.
+        DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+        battle.getEnderDragon().setInvulnerable(false);
     }
 
     // ------------------------------------------------------------------------
@@ -699,8 +712,7 @@ public class FightState implements Listener {
         if (_stageNumber != 0 && bossDied && _bosses.isEmpty()) {
             if (_stageNumber == 10) {
                 // Just the dragon in stage 11.
-                debug("Beginning stage 11.");
-                _stageNumber = 11;
+                startStage11();
             } else {
                 nextStage();
             }
@@ -964,13 +976,9 @@ public class FightState implements Listener {
             playSound(bossSpawnLocation, Sound.BLOCK_BEACON_ACTIVATE);
         }, STAGE_START_DELAY * 80 / 100);
 
-        // Remove the crystal and spawn the boss.
+        // Remove the crystal and spawn the boss. Only called for stage 1-10.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             ++_stageNumber;
-            if (_stageNumber == 11) {
-                DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
-                battle.getEnderDragon().setInvulnerable(false);
-            }
 
             Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
             debug("Beginning stage: " + _stageNumber);
