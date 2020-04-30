@@ -21,17 +21,16 @@ import nu.nerd.df.Stage;
 
 // ----------------------------------------------------------------------------
 /**
- * Command executor for the `/df` command.
+ * Command executor for the <i>/df</i> command.
  */
 public class DFExecutor extends ExecutorBase {
     // ------------------------------------------------------------------------
     /**
-     * @param name
-     * @param subcommands
+     * Constructor.
      */
     public DFExecutor() {
         super("df", "help",
-              "info ", "stop", "next", "stage", "owner",
+              "info", "stop", "next", "stage", "owner",
               "list", "swap", "move", "config");
     }
 
