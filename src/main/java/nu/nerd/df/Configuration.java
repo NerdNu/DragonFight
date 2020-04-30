@@ -1,6 +1,9 @@
 package nu.nerd.df;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -29,6 +32,14 @@ public class Configuration {
      */
     public UUID FIGHT_OWNER;
 
+    /**
+     * A map from Player UUID to the number of unclaimed dragon kill prizes for
+     * that player.
+     * 
+     * The key will be absent if there are no prizes to claim.
+     */
+    public HashMap<UUID, Integer> UNCLAIMED_PRIZES = new HashMap<>();
+
     // ------------------------------------------------------------------------
     /**
      * Default constructor.
@@ -37,6 +48,39 @@ public class Configuration {
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             _stages[stageNumber - 1] = new Stage(stageNumber);
         }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return the stored number of unclaimed prizes for the player with the
+     * specified UUID.
+     * 
+     * @param playerUuid the player's UUID.
+     * @return the number of unclaimed prizes accrued to the player.
+     */
+    public int getUnclaimedPrizes(UUID playerUuid) {
+        return UNCLAIMED_PRIZES.getOrDefault(playerUuid, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Increment the stored number of unclaimed prizes for the player with the
+     * specified UUID.
+     * 
+     * @param playerUuid the player's UUID.
+     * @param amount the amount to increase the count of prizes (negative to
+     *        decrement).
+     * @return the number of unclaimed prizes accrued to the player.
+     */
+    public Integer incUnclaimedPrizes(UUID playerUuid, int amount) {
+        return UNCLAIMED_PRIZES.compute(playerUuid, (k, v) -> {
+            if (v == null) {
+                return 1;
+            } else {
+                int count = v + amount;
+                return (count > 0) ? count : null;
+            }
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -57,12 +101,26 @@ public class Configuration {
     public void reload() {
         DragonFight.PLUGIN.reloadConfig();
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
+        Logger logger = DragonFight.PLUGIN.getLogger();
+
         TOTAL_BOSS_MAX_HEALTH = config.getDouble("state.total-boss-max-health");
         try {
             String text = config.getString("state.fight-owner");
             FIGHT_OWNER = (text == null || text.isEmpty()) ? null : UUID.fromString(text);
         } catch (IllegalArgumentException ex) {
             FIGHT_OWNER = null;
+        }
+
+        UNCLAIMED_PRIZES.clear();
+        ConfigurationSection unclaimedPrizes = config.getConfigurationSection("state.unclaimed-prizes");
+        for (String key : unclaimedPrizes.getKeys(false)) {
+            try {
+                UUID uuid = UUID.fromString(key);
+                // Docs don't say if getInt() throws for malformed.
+                UNCLAIMED_PRIZES.put(uuid, unclaimedPrizes.getInt(key));
+            } catch (IllegalArgumentException ex) {
+                logger.warning("Unclaimed dragon prize registered to invalid UUID: " + key);
+            }
         }
 
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
@@ -78,6 +136,11 @@ public class Configuration {
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
         config.set("state.total-boss-max-health", TOTAL_BOSS_MAX_HEALTH);
         config.set("state.fight-owner", (FIGHT_OWNER == null) ? null : FIGHT_OWNER.toString());
+
+        ConfigurationSection unclaimedPrizes = config.createSection("state.unclaimed-prizes");
+        for (Map.Entry<UUID, Integer> entry : UNCLAIMED_PRIZES.entrySet()) {
+            unclaimedPrizes.set(entry.getKey().toString(), entry.getValue());
+        }
 
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             getStage(stageNumber).save(getStageSection(stageNumber));

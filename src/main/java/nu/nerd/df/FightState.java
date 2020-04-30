@@ -1,10 +1,14 @@
 package nu.nerd.df;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -44,6 +48,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.ItemStack;
@@ -58,6 +63,7 @@ import nu.nerd.beastmaster.Drop;
 import nu.nerd.beastmaster.DropResults;
 import nu.nerd.beastmaster.DropSet;
 import nu.nerd.beastmaster.DropType;
+import nu.nerd.beastmaster.Item;
 import nu.nerd.beastmaster.PotionSet;
 import nu.nerd.beastmaster.ProbablePotion;
 import nu.nerd.beastmaster.Util;
@@ -95,12 +101,14 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Implement the <i>/df info</i> command.
+     * 
      * Show information about the current fight: stage, owner, boss health and
      * dragon health.
      * 
-     * @param sender the command sender, for messages.
+     * @param sender the command sender, for message sending.
      */
-    public void info(CommandSender sender) {
+    public void cmdInfo(CommandSender sender) {
         sender.sendMessage(ChatColor.DARK_PURPLE + "The current fight stage is " +
                            ChatColor.LIGHT_PURPLE + _stageNumber + ChatColor.DARK_PURPLE + ".");
         if (_stageNumber == 0) {
@@ -134,11 +142,14 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Implement the <i>/df stop</i> command.
+     * 
      * Stop the current fight and clean up mobs and projectiles.
      * 
-     * @param sender the command sender, for messages.
+     * @param sender the command sender, for message sending.
      */
-    public void stop(CommandSender sender) {
+    public void cmdStop(CommandSender sender) {
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Stopping the fight.");
         World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
@@ -154,28 +165,7 @@ public class FightState implements Listener {
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
         _crystals.clear();
 
-        for (LivingEntity boss : _bosses) {
-            boss.remove();
-        }
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed bosses: " + ChatColor.LIGHT_PURPLE + _bosses.size());
-        _bosses.clear();
-
-        int projectileCount = 0;
-        int mobCount = 0;
-        for (Entity entity : fightWorld.getEntities()) {
-            if (entity.isValid() && DragonUtil.hasTagOrGroup(entity, ENTITY_TAG)) {
-                entity.remove();
-                if (entity instanceof Projectile) {
-                    ++projectileCount;
-                } else {
-                    // Note: Crystals are tagged PILLAR_CRYSTAL_TAG, not
-                    // ENTITY_TAG.
-                    ++mobCount;
-                }
-            }
-        }
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed mobs: " + ChatColor.LIGHT_PURPLE + mobCount);
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + ChatColor.LIGHT_PURPLE + projectileCount);
+        cleanUp(sender);
         _stageNumber = 0;
 
         // Immediately hide the boss bar, rather than waiting for update.
@@ -186,25 +176,106 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Implement the <i>/df next</i> command.
+     * 
      * Remove the current stage boss and fight-associated support mobs and
      * projectiles, and skip to the next stage.
+     * 
+     * @param sender the command sender, for message sending.
      */
-    public void nextStage(CommandSender sender) {
+    public void cmdNextStage(CommandSender sender) {
         World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getEnderDragon() == null) {
             sender.sendMessage(ChatColor.RED + "You need to spawn a dragon with end crystals first!");
             return;
         }
-        if (_stageNumber == 11) {
-            stop(sender);
+
+        int nextStage = (_stageNumber + 1) % 12;
+        if (nextStage == 0) {
+            cmdStop(sender);
             return;
         }
 
+        cleanUp(sender);
+        despawnPillarCrystals(1);
+
+        // Skip to the next stage.
+        startStage(sender, _stageNumber + 1, getBossSpawnLocation());
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Implement the <i>/df stage</i> command.
+     * 
+     * Remove the current stage boss and fight-associated support mobs and
+     * projectiles, and start the specified stage.
+     * 
+     * The current implementation only supports skipping forwards - not going
+     * backwards.
+     * 
+     * @param sender the command sender, for message sending.
+     * @param stageNumber the new stage number from 0 (stopped) to 11 (dragon
+     *        only).
+     */
+    public void cmdSkipToStage(CommandSender sender, int stageNumber) {
+        if (stageNumber < 0 || stageNumber > 11) {
+            sender.sendMessage(ChatColor.RED + "The stage number must be from 0 to 11.");
+            return;
+        }
+
+        if (stageNumber == 0) {
+            cmdStop(sender);
+            return;
+        }
+
+        if (stageNumber < _stageNumber) {
+            sender.sendMessage(ChatColor.RED + "Skipping backwards is not currently supported.");
+            return;
+        }
+
+        if (stageNumber == _stageNumber) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "You're already in stage " +
+                               ChatColor.LIGHT_PURPLE + stageNumber + ChatColor.DARK_PURPLE + ".");
+            return;
+        }
+
+        // So from here on, stageNumber > _stageNumber.
+        World fightWorld = DragonUtil.getFightWorld();
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        if (battle.getEnderDragon() == null) {
+            sender.sendMessage(ChatColor.RED + "You have to spawn the dragon first, using end crystals.");
+            return;
+        } else {
+            // Going from stage > 0 to a higher number.
+            cleanUp(sender);
+        }
+
+        int skippedStages = stageNumber - _stageNumber;
+        despawnPillarCrystals(skippedStages);
+        startStage(sender, stageNumber, getBossSpawnLocation());
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Log debug message.
+     * 
+     * @param message the message.
+     */
+    public static void debug(String message) {
+        DragonFight.PLUGIN.getLogger().info(message);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Clean up mobs and projectiles and message the command sender with tallies
+     * of entities removed.
+     */
+    protected void cleanUp(CommandSender sender) {
         int projectileCount = 0;
         int bossCount = 0;
         int supportCount = 0;
-        for (Entity entity : fightWorld.getEntities()) {
+        for (Entity entity : DragonUtil.getFightWorld().getEntities()) {
             if (entity.isValid()) {
                 if (entity instanceof Projectile && DragonUtil.hasTagOrGroup(entity, ENTITY_TAG)) {
                     entity.remove();
@@ -218,27 +289,11 @@ public class FightState implements Listener {
                 }
             }
         }
+
+        _bosses.clear();
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed boss mobs: " + ChatColor.LIGHT_PURPLE + bossCount);
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed support mobs: " + ChatColor.LIGHT_PURPLE + supportCount);
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed projectiles: " + ChatColor.LIGHT_PURPLE + projectileCount);
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Starting stage: " + ChatColor.LIGHT_PURPLE + (_stageNumber + 1));
-
-        // In stage 10, there are no more crystals to remove.
-        if (_stageNumber < 10) {
-            nextStage();
-        } else {
-            startStage11();
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Log debug message.
-     * 
-     * @param message the message.
-     */
-    public static void debug(String message) {
-        DragonFight.PLUGIN.getLogger().info(message);
     }
 
     // ------------------------------------------------------------------------
@@ -445,19 +500,27 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Show the stage 11 titles and set the dragon vulnerable again.
+     * When a player logs in, notify them if they have unclaimed prizes.
      */
-    protected void startStage11() {
-        debug("Beginning stage 11.");
-        _stageNumber = 11;
-
-        // Show a fixed stage 11 title for the dragon.
-        getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
-                                                    ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
-
-        // The dragon was set invulnerable in stage 1.
-        DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
-        battle.getEnderDragon().setInvulnerable(false);
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    protected void onPlayerLogin(PlayerLoginEvent event) {
+        Player player = event.getPlayer();
+        int unclaimedCount = DragonFight.CONFIG.getUnclaimedPrizes(player.getUniqueId());
+        if (unclaimedCount > 0) {
+            // Delay the message so it comes after the usual noise.
+            Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> {
+                String plural = (unclaimedCount > 1) ? "s" : "";
+                if (player.isOnline()) {
+                    player.sendMessage(ChatColor.DARK_PURPLE + "You have " +
+                                       ChatColor.LIGHT_PURPLE + unclaimedCount +
+                                       ChatColor.DARK_PURPLE + " unclaimed dragon fight prize" + plural + ".");
+                    player.sendMessage(ChatColor.DARK_PURPLE + "Ensure you have some empty inventory slots,");
+                    player.sendMessage(ChatColor.DARK_PURPLE + "then run " +
+                                       ChatColor.LIGHT_PURPLE + "/dragon prize" +
+                                       ChatColor.DARK_PURPLE + " to claim your prize.");
+                }
+            }, 25);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -698,7 +761,7 @@ public class FightState implements Listener {
         }
 
         if (event.getEntityType() == EntityType.ENDER_DRAGON) {
-            // TODO: df-dragon-drops custom handling.
+            onDragonDeath(DragonFight.CONFIG.FIGHT_OWNER);
             // TODO: clean up associated entities?
             _stageNumber = 0;
             return;
@@ -784,6 +847,7 @@ public class FightState implements Listener {
             dragonSpawnCrystals.size() == 3) {
             debug("The dragon was spawned by: " + event.getPlayer().getName());
             DragonFight.CONFIG.FIGHT_OWNER = event.getPlayer().getUniqueId();
+            DragonFight.CONFIG.save();
         }
 
         // Restrict placement of crystals on the end portal frame.
@@ -855,16 +919,17 @@ public class FightState implements Listener {
      * crystals still exist and the RespawnPhase is NONE.
      */
     protected void onDragonSpawn(EnderDragon dragon) {
-        // The dragon is invulnerable for stages 1 through 10.
-        // NOTE: creative mode trumps invulnerability.
-        dragon.setInvulnerable(true);
-
         // debug("Dragon spawned. Spawning crystals: " +
         // getDragonSpawnCrystals());
         // debug("Respawn phase: " +
         if (_crystals.size() == 0) {
+            // Observed once in testing. Don't set invulnerable.
             debug("Dragon spawned but there were no ender crystals?!");
             return;
+        } else {
+            // The dragon is invulnerable for stages 1 through 10.
+            // NOTE: creative mode trumps invulnerability.
+            dragon.setInvulnerable(true);
         }
 
         // Setting the crystals invulnerable before the dragon spawns does not
@@ -876,6 +941,120 @@ public class FightState implements Listener {
         }
         reconfigureDragonBossBar();
         nextStage();
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * When the dragon dies:
+     * 
+     * <ul>
+     * <li>If the fight owner is online, put the dragon drops in that player's
+     * inventory. If they are not online,
+     * </ul>
+     * 
+     * @param playerUuid the UUID of the player to be awarded the drops.
+     */
+    protected void onDragonDeath(UUID playerUuid) {
+        // Bukkit.getOfflinePlayer() NEVER returns null, even for non-existent.
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
+        getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.LIGHT_PURPLE + offlinePlayer.getName() +
+                                                      ChatColor.DARK_PURPLE + " was awarded the prize for defeating the dragon."));
+
+        Player player = offlinePlayer.getPlayer();
+        if (player == null) {
+            // Fight owner is offline. Record an unclaimed prize.
+            debug("An unclaimed prize was added to offline fight owner " + offlinePlayer.getName() + ".");
+            getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.DARK_PURPLE + "They can claim it when they log in."));
+            DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
+            DragonFight.CONFIG.save();
+        } else {
+            // Select a single drop from the `df-dragon-drops` loot set.
+            // TODO: actually, multiple drops should be supported, once
+            // BeastMaster supports deferred item drops.
+            debug("Generating dragon prizes for " + player.getName());
+            List<ItemStack> prizes = generatePrizes();
+            if (!givePrizes(player, prizes)) {
+                // The item(s) did not fit, so player must claim with command.
+                DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
+                DragonFight.CONFIG.save();
+
+                String slots = prizes.size() + " inventory slot" + (prizes.size() > 1 ? "s" : "");
+                player.sendMessage(ChatColor.DARK_PURPLE + "You need at least " + slots + " empty.");
+                player.sendMessage(ChatColor.DARK_PURPLE + "Run " +
+                                   ChatColor.LIGHT_PURPLE + "/dragon prize" +
+                                   ChatColor.DARK_PURPLE + " to claim your prize.");
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Give all of the specified dragon death prizes to the player, or none of
+     * them if not all can fit in the player's inventory.
+     * 
+     * @param player the player.
+     * @param prizes the list of items to give.
+     * @return true if all prizes could fit; false if they were deferred.
+     */
+    protected boolean givePrizes(Player player, List<ItemStack> prizes) {
+        if (prizes.size() == 0) {
+            debug("No dragon drops have been configured!");
+            return true;
+        }
+
+        // Check that the player has enough open inventory slots.
+        int openSlots = (int) Stream.of(player.getInventory().getStorageContents())
+        .filter(i -> (i == null || i.getType() == Material.AIR)).count();
+        debug(player.getName() + " has " + openSlots + " empty slots for " + prizes.size() + " items.");
+
+        if (openSlots < prizes.size()) {
+            return false;
+        } else {
+            ItemStack[] prizesArray = prizes.toArray(new ItemStack[prizes.size()]);
+            HashMap<Integer, ItemStack> skippedItems = player.getInventory().addItem(prizesArray);
+            player.sendMessage(ChatColor.DARK_PURPLE + "A prize for defeating the dragon has been placed in your inventory!");
+            debug("The dragon drops were put in " + player.getName() + "'s inventory.");
+
+            // Check for failure. This should never happen. But the Bukkit
+            // API has surprised me before.
+            if (!skippedItems.isEmpty()) {
+                debug("Some items didn't fit in " + player.getName() + "'s inventory (and that should be impossible). They were:");
+                for (ItemStack itemStack : skippedItems.values()) {
+                    debug("Skipped item: " + Util.getItemDescription(itemStack));
+                }
+                player.sendMessage(ChatColor.DARK_PURPLE + "Some prizes didn't fit in your inventory. That's a bug!");
+                player.sendMessage(ChatColor.DARK_PURPLE + "Do a /modreq and we'll fix that for you.");
+            }
+            return true;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Generate all ItemStack for a single dragon prize.
+     * 
+     * @return a list of ItemStacks.
+     */
+    List<ItemStack> generatePrizes() {
+        ArrayList<ItemStack> prizes = new ArrayList<>();
+        DropSet dropSet = BeastMaster.LOOTS.getDropSet("df-dragon-drops");
+        Drop drop = dropSet.chooseOneDrop();
+        debug("The dragon prize with ID " + drop.getId() + " was selected.");
+        if (drop.getDropType() == DropType.ITEM) {
+            Item item = BeastMaster.ITEMS.getItem(drop.getId());
+            ItemStack itemStack = item.getItemStack();
+            if (itemStack == null) {
+                DragonFight.PLUGIN.getLogger().severe("Dragon drop item " + item.getId() + " is undefined!");
+            } else {
+                itemStack = itemStack.clone();
+                itemStack.setAmount(Util.random(drop.getMinAmount(), drop.getMaxAmount()));
+                prizes.add(itemStack);
+            }
+        } else {
+            // TODO: in the final version this would be ok?
+            DragonFight.PLUGIN.getLogger().severe("Invalid drop type selected from df-dragon-drops.");
+        }
+        return prizes;
     }
 
     // ------------------------------------------------------------------------
@@ -940,7 +1119,6 @@ public class FightState implements Listener {
      * This method is called to do the boss spawning sequence for stages 1 to
      * 10.
      */
-    @SuppressWarnings("deprecation")
     protected void nextStage() {
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
@@ -978,34 +1156,86 @@ public class FightState implements Listener {
 
         // Remove the crystal and spawn the boss. Only called for stage 1-10.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
-            ++_stageNumber;
-
-            Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
-            debug("Beginning stage: " + _stageNumber);
-
-            // Despawn the crystal that becomes the boss.
             _crystals.remove(replacedCrystal);
-
-            // Remove entity, spawn boss and play effects.
             replacedCrystal.remove();
-
-            // Spawn boss or bosses and set up for tracking.
-            DropResults results = new DropResults();
-            DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
-            if (dropSet != null) {
-                dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
-            }
-
-            // Compute the total health for the stage's boss bar.
-            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = results.getMobs().stream()
-            .filter(mob -> DragonUtil.hasTagOrGroup(mob, BOSS_TAG))
-            .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
-
-            // Show the title.
-            Set<Player> nearby = getNearbyPlayers();
-            debug(nearby.size() + " players nearby.");
-            stage.announce(nearby);
+            startStage(null, _stageNumber + 1, bossSpawnLocation);
         }, STAGE_START_DELAY);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Despawn the specified number of pillar crystals.
+     * 
+     * This method is used by the <i>/df next</i> and <i>/df stage</i> command
+     * implementations.
+     * 
+     * @param count the number of crystals to untrack and despawn.
+     */
+    protected void despawnPillarCrystals(int count) {
+        while (!_crystals.isEmpty() && count-- > 0) {
+            EnderCrystal replacedCrystal = _crystals.iterator().next();
+            _crystals.remove(replacedCrystal);
+            replacedCrystal.remove();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Begin the specified boss stage (1 to 11 only).
+     * 
+     * Stage 0 is not supported.
+     * 
+     * @param sender the command sender for messages, or null if unused.
+     * @param stageNumber the stage number from 1 to 10.
+     * @param bossSpawnLocation the location where the bosses are spawned.
+     */
+    protected void startStage(CommandSender sender, int stageNumber, Location bossSpawnLocation) {
+        if (sender != null) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Starting stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
+        }
+        _stageNumber = stageNumber;
+        if (_stageNumber == 11) {
+            startStage11();
+            return;
+        }
+
+        // Stages 1 to 10:
+        Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
+        debug("Beginning stage: " + _stageNumber);
+
+        // Spawn boss or bosses.
+        DropResults results = new DropResults();
+        DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
+        if (dropSet != null) {
+            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
+        }
+
+        // Compute the total health for the stage's boss bar.
+        DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = results.getMobs().stream()
+        .filter(mob -> DragonUtil.hasTagOrGroup(mob, BOSS_TAG))
+        .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
+
+        // Show the title.
+        Set<Player> nearby = getNearbyPlayers();
+        debug(nearby.size() + " players nearby.");
+        stage.announce(nearby);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Show the stage 11 titles and set the dragon vulnerable again.
+     */
+    protected void startStage11() {
+        debug("Beginning stage 11.");
+        _stageNumber = 11;
+
+        // Show a fixed stage 11 title for the dragon.
+        getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
+                                                    ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
+
+        // The dragon was set invulnerable in stage 1.
+        DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+        battle.getEnderDragon().setInvulnerable(false);
     }
 
     // ------------------------------------------------------------------------

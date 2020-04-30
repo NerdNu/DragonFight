@@ -4,8 +4,11 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.boss.BarColor;
+import org.bukkit.boss.DragonBattle;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 
@@ -13,6 +16,7 @@ import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.commands.Commands;
 import nu.nerd.beastmaster.commands.ExecutorBase;
 import nu.nerd.df.DragonFight;
+import nu.nerd.df.DragonUtil;
 import nu.nerd.df.Stage;
 
 // ----------------------------------------------------------------------------
@@ -26,7 +30,9 @@ public class DFExecutor extends ExecutorBase {
      * @param subcommands
      */
     public DFExecutor() {
-        super("df", "help", "stop", "next", "swap", "config");
+        super("df", "help",
+              "info ", "stop", "next", "stage", "owner",
+              "list", "swap", "move", "config");
     }
 
     // ------------------------------------------------------------------------
@@ -41,17 +47,64 @@ public class DFExecutor extends ExecutorBase {
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("info")) {
-            DragonFight.FIGHT.info(sender);
+            DragonFight.FIGHT.cmdInfo(sender);
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("stop")) {
-            DragonFight.FIGHT.stop(sender);
+            DragonFight.FIGHT.cmdStop(sender);
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("next")) {
-            DragonFight.FIGHT.nextStage(sender);
+            DragonFight.FIGHT.cmdNextStage(sender);
+            return true;
+        }
+
+        if (args.length >= 1 && args[0].equalsIgnoreCase("stage")) {
+            if (args.length != 2) {
+                sender.sendMessage(ChatColor.RED + "Usage: /df stage <number>");
+                sender.sendMessage(ChatColor.RED + "Skip forward to the specified stage, from 0 to 11 (dragon only).");
+                return true;
+            }
+            String numberArg = args[1];
+            Integer stageNumber = Commands.parseNumber(numberArg, Commands::parseInt,
+                                                       n -> n >= 0 && n <= 11,
+                                                       () -> sender.sendMessage(ChatColor.RED + "The stage number must be an integer from 1 to 11."),
+                                                       null);
+            if (stageNumber == null) {
+                return true;
+            }
+
+            DragonFight.FIGHT.cmdSkipToStage(sender, stageNumber);
+            return true;
+        }
+
+        if (args.length >= 1 && args[0].equalsIgnoreCase("owner")) {
+            if (args.length != 2) {
+                sender.sendMessage(ChatColor.RED + "Usage: /df owner <player>");
+                sender.sendMessage(ChatColor.RED + "Set the owner of the current fight.");
+                return true;
+            }
+            String playerArg = args[1];
+
+            // Disallow if the dragon has not yet spawned.
+            DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+            if (battle.getEnderDragon() == null) {
+                sender.sendMessage(ChatColor.RED + "The fight owner cannot be changed until the dragon is spawned.");
+                return true;
+            }
+
+            // Always returns a non-null OfflinePlayer.
+            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerArg);
+            DragonFight.CONFIG.FIGHT_OWNER = offlinePlayer.getUniqueId();
+            DragonFight.CONFIG.save();
+
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The fight owner was set to " +
+                               ChatColor.LIGHT_PURPLE + offlinePlayer.getName() +
+                               ChatColor.DARK_PURPLE + ", uuid " +
+                               ChatColor.LIGHT_PURPLE + offlinePlayer.getUniqueId().toString() +
+                               ChatColor.DARK_PURPLE + ".");
             return true;
         }
 
