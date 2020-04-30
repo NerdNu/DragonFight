@@ -258,6 +258,40 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Implement the <i>/dragon prize</i> command.
+     * 
+     * @param sender the command sender, for message sending.
+     */
+    public void cmdDragonPrize(CommandSender sender) {
+        Player player = (Player) sender;
+        UUID playerUuid = player.getUniqueId();
+
+        int unclaimed = DragonFight.CONFIG.getUnclaimedPrizes(playerUuid);
+        if (unclaimed <= 0) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "You don't have any unclaimed dragon prizes.");
+        } else {
+            List<ItemStack> prizes = generatePrizes();
+            if (givePrizes(player, prizes)) {
+                DragonFight.CONFIG.incUnclaimedPrizes(playerUuid, -1);
+                DragonFight.CONFIG.save();
+
+                if (--unclaimed > 0) {
+                    String prizeCount = ChatColor.LIGHT_PURPLE + Integer.toString(unclaimed) +
+                                        ChatColor.DARK_PURPLE + " unclaimed prize" + (unclaimed > 1 ? "s" : "");
+                    sender.sendMessage(ChatColor.DARK_PURPLE + "You still have " + prizeCount + ".");
+                }
+            } else {
+                // The item(s) did not fit.
+                String slots = ChatColor.LIGHT_PURPLE + Integer.toString(prizes.size()) +
+                               ChatColor.DARK_PURPLE + " inventory slot" + (prizes.size() > 1 ? "s" : "");
+                player.sendMessage(ChatColor.DARK_PURPLE + "You need at least " + slots + " empty.");
+                player.sendMessage(ChatColor.DARK_PURPLE + "Make some room in your inventory and try again.");
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Log debug message.
      * 
      * @param message the message.
@@ -978,7 +1012,8 @@ public class FightState implements Listener {
                 DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
                 DragonFight.CONFIG.save();
 
-                String slots = prizes.size() + " inventory slot" + (prizes.size() > 1 ? "s" : "");
+                String slots = ChatColor.LIGHT_PURPLE + Integer.toString(prizes.size()) +
+                               ChatColor.DARK_PURPLE + " inventory slot" + (prizes.size() > 1 ? "s" : "");
                 player.sendMessage(ChatColor.DARK_PURPLE + "You need at least " + slots + " empty.");
                 player.sendMessage(ChatColor.DARK_PURPLE + "Run " +
                                    ChatColor.LIGHT_PURPLE + "/dragon prize" +
@@ -996,7 +1031,7 @@ public class FightState implements Listener {
      * @param prizes the list of items to give.
      * @return true if all prizes could fit; false if they were deferred.
      */
-    protected boolean givePrizes(Player player, List<ItemStack> prizes) {
+    protected static boolean givePrizes(Player player, List<ItemStack> prizes) {
         if (prizes.size() == 0) {
             debug("No dragon drops have been configured!");
             return true;
@@ -1035,7 +1070,7 @@ public class FightState implements Listener {
      * 
      * @return a list of ItemStacks.
      */
-    List<ItemStack> generatePrizes() {
+    protected static List<ItemStack> generatePrizes() {
         ArrayList<ItemStack> prizes = new ArrayList<>();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet("df-dragon-drops");
         Drop drop = dropSet.chooseOneDrop();

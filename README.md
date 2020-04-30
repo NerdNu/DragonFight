@@ -12,16 +12,27 @@ or more boss mobs in the circle between the obsidian pillars. All the other end
 crystals are invulnerable. When the player defeats the current stage boss mobs,
 the next crystal is turned into boss mobs.
 
-Since the other crystals are invulnerable and heal the dragon, it's very
-unlikely that the dragon can be killed until all bosses of all 10 stages are
-defeated.
-
-In the 11th and final stage of the fight, the player must defeat the dragon.
+The dragon is also invulnerable until all 10 stages have been cleared. In the
+11th and final stage of the fight, the player must defeat the dragon.
 
 The DragonFight plugin relies on new mob properties added in BeastMaster
 v2.13.0. At the time of writing, those properties are described in the
 [release notes for that version of BeastMaster](https://github.com/NerdNu/BeastMaster/releases/tag/v2.13.0), 
 but are not yet documented on the BeastMaster wiki.
+
+In the current version, score-keeping is not implemented. In the completed
+plugin, team and individual completion times will be recorded for all 11 stages
+as well as the total time for all stages combined.
+
+The drops or "prize" for defeating the dragon are given to the player who
+placed the fourth (final) end crystal to summon the dragon. There are
+admin commands to switch the owner of the fight in the event that someone
+spawns the dragon and then leaves with no intention of killing it.
+
+If the fight owner has a full inventory or is offline when the dragon dies,
+then the unclaimed prize is recorded. They will see a message about unclaimed
+prizes when they next log in and they can claim a prize with the `/dragon prize`
+command.
 
 
 ## BeastMaster Groups
@@ -159,6 +170,13 @@ they:
 
 
 ## Commands
+### Player Commands
+
+ * `/dragon help` - Show this help. Equivalent to `/help /<command>`.
+ * `/dragon prize` - Claim one prize for defeating the dragon.
+
+
+### Administrator Commands
 
 There is currently one administrative command:
 

@@ -56,5 +56,5 @@ commands:
     usage: |
 
       §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
-      §5/<command> ...§f - TBD. Stuff like showing your high score.
+      §5/<command> prize§f - Claim one prize for defeating the dragon.
 
