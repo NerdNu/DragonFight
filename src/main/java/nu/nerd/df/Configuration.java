@@ -74,12 +74,8 @@ public class Configuration {
      */
     public Integer incUnclaimedPrizes(UUID playerUuid, int amount) {
         return UNCLAIMED_PRIZES.compute(playerUuid, (k, v) -> {
-            if (v == null) {
-                return 1;
-            } else {
-                int count = v + amount;
-                return (count > 0) ? count : null;
-            }
+            int count = (v == null) ? amount : v + amount;
+            return (count > 0) ? count : null;
         });
     }
 
