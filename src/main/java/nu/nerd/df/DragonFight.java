@@ -7,6 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import nu.nerd.beastmaster.commands.ExecutorBase;
 import nu.nerd.df.commands.DFExecutor;
 import nu.nerd.df.commands.DragonExecutor;
+import nu.nerd.df.commands.DragonFightExecutor;
 
 // ----------------------------------------------------------------------------
 /**
@@ -41,6 +42,7 @@ public class DragonFight extends JavaPlugin {
 
         addCommandExecutor(new DFExecutor());
         addCommandExecutor(new DragonExecutor());
+        addCommandExecutor(new DragonFightExecutor());
 
         Bukkit.getPluginManager().registerEvents(FIGHT, this);
         FIGHT.onEnable();
