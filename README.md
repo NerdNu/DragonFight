@@ -192,6 +192,8 @@ There is currently one administrative command:
 
  * `/df owner <player>` - Set the owner of the current fight.
 
+ * `/df unclaimed` - List players with unclaimed prizes.
+
  * `/df list` - List all 10 stage titles and subtitles.
 
  * `/df swap <from> <to>` - Swap two stages by stage number (1 to 10).

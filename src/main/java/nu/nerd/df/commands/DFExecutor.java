@@ -30,7 +30,7 @@ public class DFExecutor extends ExecutorBase {
      */
     public DFExecutor() {
         super("df", "help",
-              "info", "stop", "next", "stage", "owner",
+              "info", "stop", "next", "stage", "owner", "unclaimed",
               "list", "swap", "move", "config");
     }
 
@@ -104,6 +104,23 @@ public class DFExecutor extends ExecutorBase {
                                ChatColor.DARK_PURPLE + ", uuid " +
                                ChatColor.LIGHT_PURPLE + offlinePlayer.getUniqueId().toString() +
                                ChatColor.DARK_PURPLE + ".");
+            return true;
+        }
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("unclaimed")) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The following players have unclaimed prizes:");
+            String players = DragonFight.CONFIG.UNCLAIMED_PRIZES.entrySet().stream()
+            .map(entry -> {
+                // OfflinePlayer never null:
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(entry.getKey());
+                String playerName = (offlinePlayer.getName() == null) ? offlinePlayer.getUniqueId().toString()
+                                                                      : offlinePlayer.getName();
+                return ChatColor.LIGHT_PURPLE + playerName + ChatColor.DARK_PURPLE + ": " +
+                       ChatColor.WHITE + Integer.toString(entry.getValue());
+            })
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .collect(Collectors.joining(ChatColor.DARK_PURPLE + ", "));
+            sender.sendMessage(players);
             return true;
         }
 
