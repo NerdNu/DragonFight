@@ -1073,7 +1073,7 @@ public class FightState implements Listener {
     protected static List<ItemStack> generatePrizes() {
         ArrayList<ItemStack> prizes = new ArrayList<>();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet("df-dragon-drops");
-        Drop drop = dropSet.chooseOneDrop();
+        Drop drop = dropSet.chooseOneDrop(true);
         debug("The dragon prize with ID " + drop.getId() + " was selected.");
         if (drop.getDropType() == DropType.ITEM) {
             Item item = BeastMaster.ITEMS.getItem(drop.getId());
@@ -1242,7 +1242,7 @@ public class FightState implements Listener {
         DropResults results = new DropResults();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
         if (dropSet != null) {
-            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation);
+            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
         }
 
         // Compute the total health for the stage's boss bar.
