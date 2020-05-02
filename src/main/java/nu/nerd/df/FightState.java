@@ -130,6 +130,24 @@ public class FightState implements Listener {
                                ChatColor.LIGHT_PURPLE + String.format("%.1f", getTotalBossHealth()) +
                                ChatColor.DARK_PURPLE + " out of " +
                                ChatColor.LIGHT_PURPLE + DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH + ".");
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Bosses:");
+            _bosses.stream().sorted((b1, b2) -> {
+                MobType b1MobType = BeastMaster.getMobType(b1);
+                MobType b2MobType = BeastMaster.getMobType(b2);
+                return b1MobType.getId().compareToIgnoreCase(b2MobType.getId());
+            }).forEach((boss) -> {
+                MobType bossMobType = BeastMaster.getMobType(boss);
+                String bossName = (String) bossMobType.getDerivedProperty("name").getValue();
+                if (bossName == null) {
+                    bossName = ChatColor.GRAY + "no name";
+                }
+                sender.sendMessage(ChatColor.LIGHT_PURPLE + bossMobType.getId() + " " +
+                                   ChatColor.translateAlternateColorCodes('&', bossName) +
+                                   ChatColor.DARK_PURPLE + " - " +
+                                   ChatColor.LIGHT_PURPLE + String.format("%.1f", boss.getHealth()) +
+                                   ChatColor.DARK_PURPLE + " / " +
+                                   ChatColor.LIGHT_PURPLE + String.format("%.1f", boss.getMaxHealth()));
+            });
         }
 
         DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
