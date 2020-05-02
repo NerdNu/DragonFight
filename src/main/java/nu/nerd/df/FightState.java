@@ -602,7 +602,11 @@ public class FightState implements Listener {
 
         // Track the bosses.
         if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
-            _bosses.add((LivingEntity) entity);
+            LivingEntity boss = (LivingEntity) entity;
+            MobType bossMobType = BeastMaster.getMobType(boss);
+            debug("Boss spawned: " + bossMobType.getId());
+            _bosses.add(boss);
+            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH += boss.getMaxHealth();
         }
 
         DragonBattle battle = world.getEnderDragonBattle();
@@ -1257,16 +1261,13 @@ public class FightState implements Listener {
         debug("Beginning stage: " + _stageNumber);
 
         // Spawn boss or bosses.
+        DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
         DropResults results = new DropResults();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
         if (dropSet != null) {
             dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
         }
-
-        // Compute the total health for the stage's boss bar.
-        DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = results.getMobs().stream()
-        .filter(mob -> DragonUtil.hasTagOrGroup(mob, BOSS_TAG))
-        .reduce(0.0, (sum, b) -> sum + b.getMaxHealth(), (h1, h2) -> h1 + h2);
+        debug("Mobs are spawned.");
 
         // Show the title.
         Set<Player> nearby = getNearbyPlayers();
@@ -1398,8 +1399,12 @@ public class FightState implements Listener {
         getNearbyPlayers().forEach(p -> _bossBar.addPlayer(p));
 
         // Update the bar progress according to total remaining boss health.
-        double newProgress = getTotalBossHealth() / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
-        _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
+        // The total health should never be 0 by the time it gets in here
+        // but just in case I'm wrong, guard against division by 0.
+        if (DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH > 0.001) {
+            double newProgress = getTotalBossHealth() / DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH;
+            _bossBar.setProgress(Util.clamp(newProgress, 0.0, 1.0));
+        }
     }
 
     // ------------------------------------------------------------------------
