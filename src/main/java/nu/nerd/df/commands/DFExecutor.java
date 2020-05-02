@@ -108,6 +108,11 @@ public class DFExecutor extends ExecutorBase {
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("unclaimed")) {
+            if (DragonFight.CONFIG.UNCLAIMED_PRIZES.isEmpty()) {
+                sender.sendMessage(ChatColor.DARK_PURPLE + "No players have unclaimed prizes.");
+                return true;
+            }
+
             sender.sendMessage(ChatColor.DARK_PURPLE + "The following players have unclaimed prizes:");
             String players = DragonFight.CONFIG.UNCLAIMED_PRIZES.entrySet().stream()
             .map(entry -> {
