@@ -33,7 +33,7 @@ public class DragonFightExecutor extends ExecutorBase {
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             DragonFight.CONFIG.reload();
-            sender.sendMessage(ChatColor.DARK_PURPLE + "Configuration reloaded.");
+            sender.sendMessage(ChatColor.DARK_PURPLE + "DragonFight configuration reloaded.");
             return true;
         }
 
