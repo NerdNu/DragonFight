@@ -101,6 +101,25 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Implement the <i>/dragon info</i> command.
+     * 
+     * This command is for ordinary players to check the fight status.
+     */
+    public void cmdPlayerInfo(CommandSender sender) {
+        if (_stageNumber == 0) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Nobody is fighting the dragon right now.");
+            return;
+        } else {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The current fight stage is " +
+                               ChatColor.LIGHT_PURPLE + _stageNumber + ChatColor.DARK_PURPLE + ".");
+            OfflinePlayer fightOwner = Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER);
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The final drops are owned by " +
+                               ChatColor.LIGHT_PURPLE + fightOwner.getName() + ChatColor.DARK_PURPLE + ".");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Implement the <i>/df info</i> command.
      * 
      * Show information about the current fight: stage, owner, boss health and

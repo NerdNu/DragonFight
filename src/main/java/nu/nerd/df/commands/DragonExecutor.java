@@ -17,7 +17,7 @@ public class DragonExecutor extends ExecutorBase {
      * Constructor.
      */
     public DragonExecutor() {
-        super("dragon", "help", "prize");
+        super("dragon", "help", "info", "prize");
     }
 
     // ------------------------------------------------------------------------
@@ -29,6 +29,11 @@ public class DragonExecutor extends ExecutorBase {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("help"))) {
             return false;
+        }
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("info")) {
+            DragonFight.FIGHT.cmdPlayerInfo(sender);
+            return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("prize")) {

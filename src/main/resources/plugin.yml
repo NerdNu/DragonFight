@@ -57,5 +57,6 @@ commands:
     usage: |
 
       §5/<command> help§f - Show this help. Equivalent to §5/help /<command>§f.
+      §5/<command> info§f - Show information about the current fight: stage number, owner.
       §5/<command> prize§f - Claim one prize for defeating the dragon.
 
