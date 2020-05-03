@@ -173,6 +173,7 @@ they:
 ### Player Commands
 
  * `/dragon help` - Show this help. Equivalent to `/help /<command>`.
+ * `/dragon info` - Show information about the current fight: stage number, owner.
  * `/dragon prize` - Claim one prize for defeating the dragon.
 
 
