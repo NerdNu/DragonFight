@@ -84,9 +84,9 @@ public class FightState implements Listener {
      * Actions performed on plugin enable.
      */
     public void onEnable() {
+        defineBeastMasterObjects();
         discoverFightState();
         debug("Detected stage: " + _stageNumber);
-        defineBeastMasterObjects();
         reconfigureDragonBossBar();
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
     }
@@ -97,6 +97,14 @@ public class FightState implements Listener {
      */
     public void onDisable() {
         Bukkit.getScheduler().cancelTasks(DragonFight.PLUGIN);
+
+        // If restarting while the dragon is spawning, blow it all away and log
+        // it so the admins can refund.
+        List<Entity> spawningCrystals = getDragonSpawnCrystals();
+        if (spawningCrystals.size() == 4) {
+            debug("Stopping the fight due to restart.");
+            cmdStop(Bukkit.getConsoleSender());
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -194,12 +202,19 @@ public class FightState implements Listener {
             // Hacky, but works.
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "execute in minecraft:the_end run kill @e[type=minecraft:ender_dragon]");
             sender.sendMessage(ChatColor.DARK_PURPLE + "Removed the dragon.");
+        } else {
+            List<Entity> spawningCrystals = getDragonSpawnCrystals();
+            if (!spawningCrystals.isEmpty()) {
+                spawningCrystals.forEach(e -> e.remove());
+                sender.sendMessage(ChatColor.DARK_PURPLE + "Removed spawning crystals: " +
+                                   ChatColor.LIGHT_PURPLE + spawningCrystals.size());
+            }
         }
 
         for (EnderCrystal crystal : _crystals) {
             crystal.remove();
         }
-        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
+        sender.sendMessage(ChatColor.DARK_PURPLE + "Removed pillar crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
         _crystals.clear();
 
         cleanUp(sender);
@@ -402,25 +417,32 @@ public class FightState implements Listener {
                 }
             }
         }
+        debug("Discovered bosses: " + _bosses.size());
 
         // Work out what stage we're in.
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         _stageNumber = (battle.getEnderDragon() == null) ? 0 : 10 - _crystals.size();
-        if (_stageNumber == 10) {
-            // The difference between stage 10 and 11 is that in 11 there are no
-            // boss mobs.
-            for (Entity entity : fightWorld.getEntities()) {
-                if (entity.isValid() && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
-                    return;
-                }
+
+        // A restart during the stage start spawn sequence can leave us
+        // without bosses.
+        if (battle.getEnderDragon() != null && _bosses.isEmpty()) {
+            if (_stageNumber == 0) {
+                // We have a dragon and 10 pillar crystals. Start stage 1.
+                debug("Restarting stage 1 spawn sequence after restart.");
+                nextStage();
+            } else if (_stageNumber < 10) { // _stageNumber 1-9
+                // 1 - 9 pillar crystals and no bosses.
+                debug("Restarting stage " + (_stageNumber + 1) + " spawn sequence after restart.");
+                nextStage();
+            } else if (_stageNumber == 10) {
+                // We have a dragon, 0 pillar crystals and no bosses.
+                // The difference between stage 10 and 11 is that in 11 there
+                // are no boss mobs.
+                // Show titles again. Make dragon vulnerable.
+                debug("In stage " + 11 + ".");
+                startStage11();
             }
-            _stageNumber = 11;
-
-            // Just to be sure, let's make the dragon invulnerable for stage 11.
-            battle.getEnderDragon().setInvulnerable(false);
         }
-
-        debug("Discovered bosses: " + _bosses.size());
     }
 
     // ------------------------------------------------------------------------
@@ -479,8 +501,10 @@ public class FightState implements Listener {
         Set<String> dragonFriendGroupsValue = (Set<String>) dragonFriendGroups.getValue();
         if (dragonFriendGroupsValue == null) {
             dragonMobType.getProperty("friend-groups").setValue(DataType.TAG_SET.deserialise("df-entity"));
+            configurationChanged = true;
         } else if (!dragonFriendGroupsValue.contains("df-entity")) {
             dragonFriendGroupsValue.add("df-entity");
+            configurationChanged = true;
         }
 
         // Default mob types.
@@ -1149,7 +1173,7 @@ public class FightState implements Listener {
      *         end crystal to spawn the dragon.
      */
     protected static boolean isDragonSpawnCrystalLocation(Location loc) {
-        if (loc.getY() < 6) {
+        if (loc.getY() < 51) {
             return false;
         }
 
@@ -1169,7 +1193,7 @@ public class FightState implements Listener {
      */
     protected static List<Entity> getDragonSpawnCrystals() {
         World fightWorld = DragonUtil.getFightWorld();
-        return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 10, 3)
+        return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 5, 3)
         .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
                               isDragonSpawnCrystalLocation(e.getLocation()))
         .collect(Collectors.toList());
