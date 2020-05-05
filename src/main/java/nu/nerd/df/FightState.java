@@ -199,16 +199,20 @@ public class FightState implements Listener {
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
         if (dragon != null) {
-            // Hacky, but works.
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "execute in minecraft:the_end run kill @e[type=minecraft:ender_dragon]");
             sender.sendMessage(ChatColor.DARK_PURPLE + "Removed the dragon.");
-        } else {
-            List<Entity> spawningCrystals = getDragonSpawnCrystals();
-            if (!spawningCrystals.isEmpty()) {
-                spawningCrystals.forEach(e -> e.remove());
-                sender.sendMessage(ChatColor.DARK_PURPLE + "Removed spawning crystals: " +
-                                   ChatColor.LIGHT_PURPLE + spawningCrystals.size());
-            }
+        }
+
+        // Let's not even assume that the dragon is properly associated with
+        // the DragonBattle.
+        DragonUtil.removeAllDragons();
+
+        // Don't assume that the state is consistent, i.e. that spawning
+        // cystals are mutually exclusive with the dragon.
+        List<Entity> spawningCrystals = getDragonSpawnCrystals();
+        if (!spawningCrystals.isEmpty()) {
+            spawningCrystals.forEach(e -> e.remove());
+            sender.sendMessage(ChatColor.DARK_PURPLE + "Removed spawning crystals: " +
+                               ChatColor.LIGHT_PURPLE + spawningCrystals.size());
         }
 
         for (EnderCrystal crystal : _crystals) {

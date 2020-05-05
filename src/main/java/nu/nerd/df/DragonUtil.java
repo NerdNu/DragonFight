@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
+import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 
 import nu.nerd.beastmaster.BeastMaster;
@@ -41,6 +42,31 @@ public class DragonUtil {
     public static boolean isFightWorld(World world) {
         return world.getEnvironment() == Environment.THE_END
                && world.getName().equals(FIGHT_WORLD);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Remove a specific dragon.
+     * 
+     * Because Entity.remove() would be too easy.
+     * 
+     * @param dragon the ender dragon to remove.
+     */
+    public static void removeDragon(EnderDragon dragon) {
+        Location loc = dragon.getLocation();
+        String command = String.format("execute in minecraft:the_end run " +
+                                       "kill @e[type=minecraft:ender_dragon,x=%.2f,y=%.2f,z=%.2f,distance=..0.05,limit=1]",
+                                       loc.getX(), loc.getY(), loc.getZ());
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), command);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Remove all dragons in the end.
+     */
+    public static void removeAllDragons() {
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                                           "execute in minecraft:the_end run kill @e[type=minecraft:ender_dragon]");
     }
 
     // ------------------------------------------------------------------------
