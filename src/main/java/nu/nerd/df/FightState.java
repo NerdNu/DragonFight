@@ -416,6 +416,10 @@ public class FightState implements Listener {
         for (int x = -chunkRange; x <= chunkRange; ++x) {
             for (int z = -chunkRange; z <= chunkRange; ++z) {
                 Chunk chunk = fightWorld.getChunkAt(x, z);
+                // Keep the chunk loaded until we can get some consistency
+                // checking implemented. Even if not the real problem.
+                fightWorld.loadChunk(chunk);
+
                 for (Entity entity : chunk.getEntities()) {
                     if (entity instanceof EnderCrystal &&
                         entity.getScoreboardTags().contains(PILLAR_CRYSTAL_TAG)) {
