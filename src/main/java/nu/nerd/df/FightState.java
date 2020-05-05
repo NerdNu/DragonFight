@@ -1,6 +1,7 @@
 package nu.nerd.df;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -410,6 +411,7 @@ public class FightState implements Listener {
      */
     protected void discoverFightState() {
         World fightWorld = DragonUtil.getFightWorld();
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
 
         // Preload chunks to ensure we find the crystals.
         int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
@@ -439,9 +441,23 @@ public class FightState implements Listener {
         }
         log("Discovered bosses: " + _bosses.size());
 
+        if (battle.getEnderDragon() != null) {
+            log("Dragon " + battle.getEnderDragon().getUniqueId() + " exists.");
+        } else {
+            log("No dragon exists.");
+        }
+
         // Work out what stage we're in.
-        DragonBattle battle = fightWorld.getEnderDragonBattle();
-        _stageNumber = (battle.getEnderDragon() == null) ? 0 : 10 - _crystals.size();
+        // The dragon can randomly despawn. Make a best guess.
+        // Eventually will rewrite to load from config.
+        if (battle.getEnderDragon() == null && _bosses.isEmpty() && _crystals.isEmpty()) {
+            log("No dragon, bosses or pillar cyrstals. Guess stage 0.");
+            _stageNumber = 0;
+        } else {
+            // We hope that vanilla code respawns the dragon at some point.
+            _stageNumber = 10 - _crystals.size();
+            log("Intial guess stage " + _stageNumber);
+        }
 
         // A restart during the stage start spawn sequence can leave us
         // without bosses.
@@ -1038,6 +1054,11 @@ public class FightState implements Listener {
      * crystals still exist and the RespawnPhase is NONE.
      */
     protected void onDragonSpawn(EnderDragon dragon) {
+        log("Dragon " + dragon.getUniqueId() + " spawned.");
+
+        // Remove surplus dragons after this one is added to the world.
+        Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> removeSurplusDragons(), 1);
+
         // debug("Dragon spawned. Spawning crystals: " +
         // getDragonSpawnCrystals());
         // debug("Respawn phase: " +
@@ -1059,7 +1080,12 @@ public class FightState implements Listener {
                                                () -> crystal.setInvulnerable(true), 1);
         }
         reconfigureDragonBossBar();
-        nextStage();
+
+        // Since extra dragons can spawn randomly mid-fight, we should only
+        // advance to the next stage at the start of the fight.
+        if (_stageNumber == 0) {
+            nextStage();
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -1478,6 +1504,32 @@ public class FightState implements Listener {
      */
     public double getTotalBossHealth() {
         return _bosses.stream().reduce(0.0, (sum, b) -> sum + b.getHealth(), (h1, h2) -> h1 + h2);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Vanilla code can randomly spawn extra dragons.
+     * 
+     * Try to adapt. Not clear on when the DragonBattle has its EnderDragon
+     * reference set, so let's keep at least one, even if not referenced by the
+     * battle.
+     */
+    protected void removeSurplusDragons() {
+        World fightWorld = DragonUtil.getFightWorld();
+        Collection<EnderDragon> dragons = fightWorld.getEntitiesByClass(EnderDragon.class);
+
+        // Assume vanilla intends the newest dragon instance to replace
+        // whatever others exist. Sort into ascending order by time existed.
+        List<EnderDragon> dragonsByAge = dragons.stream()
+        .sorted((d1, d2) -> d1.getTicksLived() - d2.getTicksLived())
+        .collect(Collectors.toCollection(ArrayList::new));
+
+        // Remove every dragon after the youngest.
+        for (int i = 1; i < dragonsByAge.size(); ++i) {
+            EnderDragon dragon = dragonsByAge.get(i);
+            log("Remove surplus dragon: " + dragon.getUniqueId());
+            DragonUtil.removeDragon(dragon);
+        }
     }
 
     // ------------------------------------------------------------------------
