@@ -1,3 +1,7 @@
+settings:
+  log-prefix: '&5[DragonFight &dLOG&5]&f'
+  debug-prefix: '&5[DragonFight &fDBG&5]&f'
+
 state:
   total-boss-max-health: 0
   fight-owner:

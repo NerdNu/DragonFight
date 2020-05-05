@@ -15,6 +15,16 @@ import org.bukkit.configuration.file.FileConfiguration;
 public class Configuration {
     // ------------------------------------------------------------------------
     /**
+     * The log message prefix.
+     */
+    public String LOG_PREFIX;
+
+    /**
+     * The debug message prefix.
+     */
+    public String DEBUG_PREFIX;
+
+    /**
      * Total boss maximum health.
      * 
      * This needs to be preserved across restarts, since a stage fight may have
@@ -99,6 +109,9 @@ public class Configuration {
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
         Logger logger = DragonFight.PLUGIN.getLogger();
 
+        LOG_PREFIX = config.getString("settings.log-prefix");
+        DEBUG_PREFIX = config.getString("settings.debug-prefix");
+
         TOTAL_BOSS_MAX_HEALTH = config.getDouble("state.total-boss-max-health");
         try {
             String text = config.getString("state.fight-owner");
@@ -130,6 +143,10 @@ public class Configuration {
      */
     public void save() {
         FileConfiguration config = DragonFight.PLUGIN.getConfig();
+        // Copy defaults.
+        config.set("settings.log-prefix", LOG_PREFIX);
+        config.set("settings.debug-prefix", DEBUG_PREFIX);
+
         config.set("state.total-boss-max-health", TOTAL_BOSS_MAX_HEALTH);
         config.set("state.fight-owner", (FIGHT_OWNER == null) ? null : FIGHT_OWNER.toString());
 

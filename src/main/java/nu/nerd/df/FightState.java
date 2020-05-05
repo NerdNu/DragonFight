@@ -86,7 +86,7 @@ public class FightState implements Listener {
     public void onEnable() {
         defineBeastMasterObjects();
         discoverFightState();
-        debug("Detected stage: " + _stageNumber);
+        log("Detected stage: " + _stageNumber);
         reconfigureDragonBossBar();
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
     }
@@ -102,7 +102,7 @@ public class FightState implements Listener {
         // it so the admins can refund.
         List<Entity> spawningCrystals = getDragonSpawnCrystals();
         if (spawningCrystals.size() == 4) {
-            debug("Stopping the fight due to restart.");
+            log("Stopping the fight due to restart.");
             cmdStop(Bukkit.getConsoleSender());
         }
     }
@@ -344,12 +344,24 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Log debug message.
+     * Log messages.
+     * 
+     * @param message the message.
+     */
+    public static void log(String message) {
+        DragonFight.PLUGIN.getLogger().info(ChatColor.translateAlternateColorCodes('&', DragonFight.CONFIG.LOG_PREFIX) +
+                                            ' ' + message);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Log debug messages.
      * 
      * @param message the message.
      */
     public static void debug(String message) {
-        DragonFight.PLUGIN.getLogger().info(message);
+        DragonFight.PLUGIN.getLogger().info(ChatColor.translateAlternateColorCodes('&', DragonFight.CONFIG.DEBUG_PREFIX) +
+                                            ' ' + message);
     }
 
     // ------------------------------------------------------------------------
@@ -403,7 +415,7 @@ public class FightState implements Listener {
                 for (Entity entity : chunk.getEntities()) {
                     if (entity instanceof EnderCrystal &&
                         entity.getScoreboardTags().contains(PILLAR_CRYSTAL_TAG)) {
-                        debug("Loaded crystal " + entity.getUniqueId() + " at " + Util.formatLocation(entity.getLocation()));
+                        log("Loaded crystal " + entity.getUniqueId() + " at " + Util.formatLocation(entity.getLocation()));
                         _crystals.add((EnderCrystal) entity);
                         // In case the restart happened immediately after the
                         // crystal spawned.
@@ -417,7 +429,7 @@ public class FightState implements Listener {
                 }
             }
         }
-        debug("Discovered bosses: " + _bosses.size());
+        log("Discovered bosses: " + _bosses.size());
 
         // Work out what stage we're in.
         DragonBattle battle = fightWorld.getEnderDragonBattle();
@@ -428,18 +440,18 @@ public class FightState implements Listener {
         if (battle.getEnderDragon() != null && _bosses.isEmpty()) {
             if (_stageNumber == 0) {
                 // We have a dragon and 10 pillar crystals. Start stage 1.
-                debug("Restarting stage 1 spawn sequence after restart.");
+                log("Restarting stage 1 spawn sequence after restart.");
                 nextStage();
             } else if (_stageNumber < 10) { // _stageNumber 1-9
                 // 1 - 9 pillar crystals and no bosses.
-                debug("Restarting stage " + (_stageNumber + 1) + " spawn sequence after restart.");
+                log("Restarting stage " + (_stageNumber + 1) + " spawn sequence after restart.");
                 nextStage();
             } else if (_stageNumber == 10) {
                 // We have a dragon, 0 pillar crystals and no bosses.
                 // The difference between stage 10 and 11 is that in 11 there
                 // are no boss mobs.
                 // Show titles again. Make dragon vulnerable.
-                debug("In stage " + 11 + ".");
+                log("In stage " + 11 + ".");
                 startStage11();
             }
         }
@@ -647,7 +659,7 @@ public class FightState implements Listener {
         if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
             LivingEntity boss = (LivingEntity) entity;
             MobType bossMobType = BeastMaster.getMobType(boss);
-            debug("Boss spawned: " + bossMobType.getId());
+            log("Boss spawned: " + bossMobType.getId());
             _bosses.add(boss);
             DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH += boss.getMaxHealth();
         }
@@ -819,7 +831,7 @@ public class FightState implements Listener {
         if (DragonUtil.hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
             DragonUtil.hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
 
-            debug("Prevented end crystal explosion at " + Util.formatLocation(entity.getLocation()));
+            log("Prevented end crystal explosion at " + Util.formatLocation(entity.getLocation()));
             event.setCancelled(true);
         }
     }
@@ -944,7 +956,7 @@ public class FightState implements Listener {
         if (battle.getEnderDragon() == null &&
             isDragonSpawnCrystalLocation(blockLoc) &&
             dragonSpawnCrystals.size() == 3) {
-            debug("The dragon was spawned by: " + event.getPlayer().getName());
+            log("The dragon was spawned by: " + event.getPlayer().getName());
             DragonFight.CONFIG.FIGHT_OWNER = event.getPlayer().getUniqueId();
             DragonFight.CONFIG.save();
         }
@@ -967,7 +979,7 @@ public class FightState implements Listener {
         if (battle != null && battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
             DragonUtil.isOnPillarCircle(blockLoc)) {
             event.setCancelled(true);
-            debug("Cancelled " + event.getPlayer().getName() + " placing END_CRYSTAL at " + Util.formatLocation(blockLoc));
+            log("Cancelled " + event.getPlayer().getName() + " placing END_CRYSTAL at " + Util.formatLocation(blockLoc));
         }
     }
 
@@ -992,8 +1004,8 @@ public class FightState implements Listener {
         _crystals.add(crystal);
 
         Location loc = crystal.getLocation();
-        debug(crystal.getType() + " " + crystal.getUniqueId() +
-              " spawned at " + Util.formatLocation(loc));
+        log(crystal.getType() + " " + crystal.getUniqueId() +
+            " spawned at " + Util.formatLocation(loc));
 
         // Cannot set crystals invulnerable immediately.
         crystal.setGlowing(true);
@@ -1023,7 +1035,7 @@ public class FightState implements Listener {
         // debug("Respawn phase: " +
         if (_crystals.size() == 0) {
             // Observed once in testing. Don't set invulnerable.
-            debug("Dragon spawned but there were no ender crystals?!");
+            log("Dragon spawned but there were no ender crystals?!");
             return;
         } else {
             // The dragon is invulnerable for stages 1 through 10.
@@ -1062,7 +1074,7 @@ public class FightState implements Listener {
         Player player = offlinePlayer.getPlayer();
         if (player == null) {
             // Fight owner is offline. Record an unclaimed prize.
-            debug("An unclaimed prize was added to offline fight owner " + offlinePlayer.getName() + ".");
+            log("An unclaimed prize was added to offline fight owner " + offlinePlayer.getName() + ".");
             getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.DARK_PURPLE + "They can claim it when they log in."));
             DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
             DragonFight.CONFIG.save();
@@ -1070,7 +1082,7 @@ public class FightState implements Listener {
             // Select a single drop from the `df-dragon-drops` loot set.
             // TODO: actually, multiple drops should be supported, once
             // BeastMaster supports deferred item drops.
-            debug("Generating dragon prizes for " + player.getName());
+            log("Generating dragon prizes for " + player.getName());
             List<ItemStack> prizes = generatePrizes();
             if (!givePrizes(player, prizes)) {
                 // The item(s) did not fit, so player must claim with command.
@@ -1098,14 +1110,14 @@ public class FightState implements Listener {
      */
     protected static boolean givePrizes(Player player, List<ItemStack> prizes) {
         if (prizes.size() == 0) {
-            debug("No dragon drops have been configured!");
+            log("No dragon drops have been configured!");
             return true;
         }
 
         // Check that the player has enough open inventory slots.
         int openSlots = (int) Stream.of(player.getInventory().getStorageContents())
         .filter(i -> (i == null || i.getType() == Material.AIR)).count();
-        debug(player.getName() + " has " + openSlots + " empty slots for " + prizes.size() + " items.");
+        log(player.getName() + " has " + openSlots + " empty slots for " + prizes.size() + " items.");
 
         if (openSlots < prizes.size()) {
             return false;
@@ -1113,14 +1125,14 @@ public class FightState implements Listener {
             ItemStack[] prizesArray = prizes.toArray(new ItemStack[prizes.size()]);
             HashMap<Integer, ItemStack> skippedItems = player.getInventory().addItem(prizesArray);
             player.sendMessage(ChatColor.DARK_PURPLE + "A prize for defeating the dragon has been placed in your inventory!");
-            debug("The dragon drops were put in " + player.getName() + "'s inventory.");
+            log("The dragon drops were put in " + player.getName() + "'s inventory.");
 
             // Check for failure. This should never happen. But the Bukkit
             // API has surprised me before.
             if (!skippedItems.isEmpty()) {
-                debug("Some items didn't fit in " + player.getName() + "'s inventory (and that should be impossible). They were:");
+                log("Some items didn't fit in " + player.getName() + "'s inventory (and that should be impossible). They were:");
                 for (ItemStack itemStack : skippedItems.values()) {
-                    debug("Skipped item: " + Util.getItemDescription(itemStack));
+                    log("Skipped item: " + Util.getItemDescription(itemStack));
                 }
                 player.sendMessage(ChatColor.DARK_PURPLE + "Some prizes didn't fit in your inventory. That's a bug!");
                 player.sendMessage(ChatColor.DARK_PURPLE + "Do a /modreq and we'll fix that for you.");
@@ -1139,7 +1151,7 @@ public class FightState implements Listener {
         ArrayList<ItemStack> prizes = new ArrayList<>();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet("df-dragon-drops");
         Drop drop = dropSet.chooseOneDrop(true);
-        debug("The dragon prize with ID " + drop.getId() + " was selected.");
+        log("The dragon prize with ID " + drop.getId() + " was selected.");
         if (drop.getDropType() == DropType.ITEM) {
             Item item = BeastMaster.ITEMS.getItem(drop.getId());
             ItemStack itemStack = item.getItemStack();
@@ -1239,7 +1251,7 @@ public class FightState implements Listener {
 
         // Choose final beam target and spawn location.
         Location bossSpawnLocation = getBossSpawnLocation();
-        debug("Boss spawn location: " + Util.formatLocation(bossSpawnLocation));
+        log("Boss spawn location: " + Util.formatLocation(bossSpawnLocation));
 
         // End with the replaced crystal not glowing.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
@@ -1301,7 +1313,7 @@ public class FightState implements Listener {
 
         // Stages 1 to 10:
         Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
-        debug("Beginning stage: " + _stageNumber);
+        log("Beginning stage: " + _stageNumber);
 
         // Spawn boss or bosses.
         DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
@@ -1310,11 +1322,11 @@ public class FightState implements Listener {
         if (dropSet != null) {
             dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
         }
-        debug("Mobs are spawned.");
+        log("Mobs are spawned.");
 
         // Show the title.
         Set<Player> nearby = getNearbyPlayers();
-        debug(nearby.size() + " players nearby.");
+        log(nearby.size() + " players nearby.");
         stage.announce(nearby);
     }
 
@@ -1323,7 +1335,7 @@ public class FightState implements Listener {
      * Show the stage 11 titles and set the dragon vulnerable again.
      */
     protected void startStage11() {
-        debug("Beginning stage 11.");
+        log("Beginning stage 11.");
         _stageNumber = 11;
 
         // Show a fixed stage 11 title for the dragon.
@@ -1502,8 +1514,8 @@ public class FightState implements Listener {
                     long lastSeen = metas.get(0).asLong();
                     if (now - lastSeen > MAX_BOSS_NO_SEEN_TIME_MS) {
                         MobType mobType = BeastMaster.getMobType(boss);
-                        debug("Returning " + mobType.getId() + " " +
-                              boss.getUniqueId().toString().substring(0, 8) + " to the arena due to timeout.");
+                        log("Returning " + mobType.getId() + " " +
+                            boss.getUniqueId().toString().substring(0, 8) + " to the arena due to timeout.");
                         returnMobToBossSpawn(mobType, boss);
                         boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
                         continue;
@@ -1514,8 +1526,8 @@ public class FightState implements Listener {
                 Location loc = boss.getLocation();
                 if (loc.getY() < MIN_BOSS_Y || DragonUtil.getMagnitude2D(loc) > BOSS_RADIUS) {
                     MobType mobType = BeastMaster.getMobType(boss);
-                    debug("Returning " + mobType.getId() + " " +
-                          boss.getUniqueId().toString().substring(0, 8) + " to the arena due to location.");
+                    log("Returning " + mobType.getId() + " " +
+                        boss.getUniqueId().toString().substring(0, 8) + " to the arena due to location.");
                     returnMobToBossSpawn(mobType, boss);
                     boss.setMetadata(BOSS_SEEN_TIME_KEY, new FixedMetadataValue(DragonFight.PLUGIN, now));
                 }
