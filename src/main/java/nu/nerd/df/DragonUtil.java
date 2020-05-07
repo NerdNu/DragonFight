@@ -10,6 +10,7 @@ import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 
 import nu.nerd.beastmaster.BeastMaster;
+import nu.nerd.beastmaster.Util;
 import nu.nerd.beastmaster.mobs.MobType;
 
 // --------------------------------------------------------------------------
@@ -54,8 +55,11 @@ public class DragonUtil {
      */
     public static void removeDragon(EnderDragon dragon) {
         Location loc = dragon.getLocation();
+        FightState.log("Remove dragon: " + dragon.getUniqueId() +
+                       " at " + Util.formatLocation(dragon.getLocation()));
+
         String command = String.format("execute in minecraft:the_end run " +
-                                       "kill @e[type=minecraft:ender_dragon,x=%.2f,y=%.2f,z=%.2f,distance=..0.05,limit=1]",
+                                       "kill @e[type=minecraft:ender_dragon,x=%.2f,y=%.2f,z=%.2f,distance=..0.5,limit=1]",
                                        loc.getX(), loc.getY(), loc.getZ());
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), command);
     }
