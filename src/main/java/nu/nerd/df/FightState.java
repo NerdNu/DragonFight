@@ -180,10 +180,14 @@ public class FightState implements Listener {
 
         DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
-        sender.sendMessage(ChatColor.DARK_PURPLE + "The current dragon health is " +
-                           ChatColor.LIGHT_PURPLE + dragon.getHealth() +
-                           ChatColor.DARK_PURPLE + " out of " +
-                           ChatColor.LIGHT_PURPLE + dragon.getMaxHealth() + ".");
+        if (dragon == null) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The current dragon health is " +
+                               ChatColor.LIGHT_PURPLE + dragon.getHealth() +
+                               ChatColor.DARK_PURPLE + " out of " +
+                               ChatColor.LIGHT_PURPLE + dragon.getMaxHealth() + ".");
+        } else {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "There is no dragon associated with the battle. :/");
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -451,7 +455,7 @@ public class FightState implements Listener {
         // The dragon can randomly despawn. Make a best guess.
         // Eventually will rewrite to load from config.
         if (battle.getEnderDragon() == null && _bosses.isEmpty() && _crystals.isEmpty()) {
-            log("No dragon, bosses or pillar cyrstals. Guess stage 0.");
+            log("No dragon, bosses or pillar crystals. Guess stage 0.");
             _stageNumber = 0;
         } else {
             // We hope that vanilla code respawns the dragon at some point.
@@ -1057,7 +1061,7 @@ public class FightState implements Listener {
         log("Dragon " + dragon.getUniqueId() + " spawned.");
 
         // Remove surplus dragons after this one is added to the world.
-        Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> removeSurplusDragons(), 1);
+        Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> removeSurplusDragons(), 2);
 
         // debug("Dragon spawned. Spawning crystals: " +
         // getDragonSpawnCrystals());
@@ -1065,7 +1069,6 @@ public class FightState implements Listener {
         if (_crystals.size() == 0) {
             // Observed once in testing. Don't set invulnerable.
             log("Dragon spawned but there were no ender crystals?!");
-            return;
         } else {
             // The dragon is invulnerable for stages 1 through 10.
             // NOTE: creative mode trumps invulnerability.
@@ -1073,7 +1076,7 @@ public class FightState implements Listener {
         }
 
         // Setting the crystals invulnerable before the dragon spawns does not
-        // work. But Minecraft prevents them from being damaged.
+        // work. But Minecraft prevents them from being da maged.
         // Cannot set them invulnerable this tick either.
         for (EnderCrystal crystal : _crystals) {
             Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN,
@@ -1082,9 +1085,21 @@ public class FightState implements Listener {
         reconfigureDragonBossBar();
 
         // Since extra dragons can spawn randomly mid-fight, we should only
-        // advance to the next stage at the start of the fight.
-        if (_stageNumber == 0) {
-            nextStage();
+        // advance to the next stage if there are no bosses.
+        if (_stageNumber == 0 && _bosses.isEmpty()) {
+            log("Stage 0, no bosses, new dragon.");
+            // We may have previously inferred the stage to be 0 based on an
+            // absence of the dragon, crystals and bosses. if there are 10
+            // crystals and no bosses, we're going from stage 0 to stage 1.
+            if (_crystals.size() == 10) {
+                log("All 10 crystals, no bosses, new dragon. Go go to stage 1.");
+                nextStage();
+            } else if (_crystals.size() == 0) {
+                log("No crystals, no bosses, new dragon. Must be in stage 11.");
+                startStage11();
+            }
+        } else {
+            log("Stay in this stage. Bosses: " + _bosses.size() + ", Crystals: " + _crystals.size());
         }
     }
 
@@ -1378,7 +1393,10 @@ public class FightState implements Listener {
 
         // The dragon was set invulnerable in stage 1.
         DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
-        battle.getEnderDragon().setInvulnerable(false);
+        EnderDragon dragon = battle.getEnderDragon();
+        if (dragon != null) {
+            dragon.setInvulnerable(false);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -1515,20 +1533,31 @@ public class FightState implements Listener {
      * battle.
      */
     protected void removeSurplusDragons() {
+        log("Removing surplus dragons.");
         World fightWorld = DragonUtil.getFightWorld();
         Collection<EnderDragon> dragons = fightWorld.getEntitiesByClass(EnderDragon.class);
+        log("There are currently: " + dragons.size() + " dragons.");
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+        if (battle.getEnderDragon() == null) {
+            // Assume vanilla intends the newest dragon instance to replace
+            // whatever others exist. Sort into ascending order by time existed.
+            List<EnderDragon> dragonsByAge = dragons.stream()
+            .sorted((d1, d2) -> d1.getTicksLived() - d2.getTicksLived())
+            .collect(Collectors.toCollection(ArrayList::new));
 
-        // Assume vanilla intends the newest dragon instance to replace
-        // whatever others exist. Sort into ascending order by time existed.
-        List<EnderDragon> dragonsByAge = dragons.stream()
-        .sorted((d1, d2) -> d1.getTicksLived() - d2.getTicksLived())
-        .collect(Collectors.toCollection(ArrayList::new));
-
-        // Remove every dragon after the youngest.
-        for (int i = 1; i < dragonsByAge.size(); ++i) {
-            EnderDragon dragon = dragonsByAge.get(i);
-            log("Remove surplus dragon: " + dragon.getUniqueId());
-            DragonUtil.removeDragon(dragon);
+            // Remove every dragon after the youngest.
+            for (int i = 1; i < dragonsByAge.size(); ++i) {
+                EnderDragon dragon = dragonsByAge.get(i);
+                DragonUtil.removeDragon(dragon);
+            }
+        } else {
+            // Let the dragon battle keep the ender dragon it manages, remove
+            // the others.
+            for (EnderDragon dragon : dragons) {
+                if (dragon != battle.getEnderDragon()) {
+                    DragonUtil.removeDragon(dragon);
+                }
+            }
         }
     }
 
