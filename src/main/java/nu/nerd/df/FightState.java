@@ -180,7 +180,7 @@ public class FightState implements Listener {
 
         DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
         EnderDragon dragon = battle.getEnderDragon();
-        if (dragon == null) {
+        if (dragon != null) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "The current dragon health is " +
                                ChatColor.LIGHT_PURPLE + dragon.getHealth() +
                                ChatColor.DARK_PURPLE + " out of " +
