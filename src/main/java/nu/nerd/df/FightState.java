@@ -909,6 +909,8 @@ public class FightState implements Listener {
         boolean bossDied = DragonUtil.hasTagOrGroup(entity, BOSS_TAG);
         if (bossDied) {
             _bosses.remove(entity);
+            MobType bossMobType = BeastMaster.getMobType(entity);
+            log("Boss died: " + bossMobType.getId());
         }
 
         if (_stageNumber != 0 && bossDied && _bosses.isEmpty()) {
@@ -1115,6 +1117,8 @@ public class FightState implements Listener {
      * @param playerUuid the UUID of the player to be awarded the drops.
      */
     protected void onDragonDeath(UUID playerUuid) {
+        log("The dragon died.");
+
         // Bukkit.getOfflinePlayer() NEVER returns null, even for non-existent.
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
         getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.LIGHT_PURPLE + offlinePlayer.getName() +
