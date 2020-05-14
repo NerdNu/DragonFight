@@ -115,7 +115,7 @@ public class FightState implements Listener {
      * This command is for ordinary players to check the fight status.
      */
     public void cmdPlayerInfo(CommandSender sender) {
-        if (_stageNumber == 0) {
+        if (_stageNumber == 0 || DragonFight.CONFIG.FIGHT_OWNER == null) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "Nobody is fighting the dragon right now.");
             return;
         } else {
@@ -146,8 +146,7 @@ public class FightState implements Listener {
         // Stage number is 1 to 11 from here on.
         OfflinePlayer fightOwner = (DragonFight.CONFIG.FIGHT_OWNER == null) ? null : Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER);
         if (fightOwner == null) {
-            // This shouldn't ever happen. :P
-            sender.sendMessage(ChatColor.DARK_PURPLE + "The final will be given to a randomly selected player.");
+            sender.sendMessage(ChatColor.DARK_PURPLE + "There is no fight owner.");
         } else {
             sender.sendMessage(ChatColor.DARK_PURPLE + "The final drops are owned by " +
                                ChatColor.LIGHT_PURPLE + fightOwner.getName() + ChatColor.DARK_PURPLE + ".");
@@ -233,6 +232,10 @@ public class FightState implements Listener {
         if (_bossBar != null) {
             _bossBar.setVisible(false);
         }
+
+        // Nobody owns the drops, even if a dragon randomly spawns for funsies.
+        DragonFight.CONFIG.FIGHT_OWNER = null;
+        DragonFight.CONFIG.save();
     }
 
     // ------------------------------------------------------------------------
@@ -899,8 +902,8 @@ public class FightState implements Listener {
             return;
         }
 
-        if (event.getEntityType() == EntityType.ENDER_DRAGON) {
-            onDragonDeath(DragonFight.CONFIG.FIGHT_OWNER);
+        if (event.getEntity() instanceof EnderDragon) {
+            onDragonDeath((EnderDragon) event.getEntity());
             // TODO: clean up associated entities?
             _stageNumber = 0;
             return;
@@ -1114,13 +1117,23 @@ public class FightState implements Listener {
      * inventory. If they are not online,
      * </ul>
      * 
-     * @param playerUuid the UUID of the player to be awarded the drops.
+     * @param dragon the dragon that died.
      */
-    protected void onDragonDeath(UUID playerUuid) {
+    protected void onDragonDeath(EnderDragon dragon) {
         log("The dragon died.");
 
+        if (_stageNumber != 11) {
+            log("But we're not in stage 11, so it doesn't count.");
+            return;
+        }
+
+        if (DragonFight.CONFIG.FIGHT_OWNER == null) {
+            log("But nobody owns the fight, so it doesn't count.");
+            return;
+        }
+
         // Bukkit.getOfflinePlayer() NEVER returns null, even for non-existent.
-        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER);
         getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.LIGHT_PURPLE + offlinePlayer.getName() +
                                                       ChatColor.DARK_PURPLE + " was awarded the prize for defeating the dragon."));
 
@@ -1130,7 +1143,6 @@ public class FightState implements Listener {
             log("An unclaimed prize was added to offline fight owner " + offlinePlayer.getName() + ".");
             getNearbyPlayers().forEach(p -> p.sendMessage(ChatColor.DARK_PURPLE + "They can claim it when they log in."));
             DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
-            DragonFight.CONFIG.save();
         } else {
             // Select a single drop from the `df-dragon-drops` loot set.
             // TODO: actually, multiple drops should be supported, once
@@ -1140,7 +1152,6 @@ public class FightState implements Listener {
             if (!givePrizes(player, prizes)) {
                 // The item(s) did not fit, so player must claim with command.
                 DragonFight.CONFIG.incUnclaimedPrizes(offlinePlayer.getUniqueId(), 1);
-                DragonFight.CONFIG.save();
 
                 String slots = ChatColor.LIGHT_PURPLE + Integer.toString(prizes.size()) +
                                ChatColor.DARK_PURPLE + " inventory slot" + (prizes.size() > 1 ? "s" : "");
@@ -1150,6 +1161,11 @@ public class FightState implements Listener {
                                    ChatColor.DARK_PURPLE + " to claim your prize.");
             }
         }
+
+        // Clear the fight owner once prizes have been given or unclaimed prizes
+        // recorded, to prevent extra prizes if spurious dragons spawn.
+        DragonFight.CONFIG.FIGHT_OWNER = null;
+        DragonFight.CONFIG.save();
     }
 
     // ------------------------------------------------------------------------
