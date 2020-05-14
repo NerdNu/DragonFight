@@ -90,6 +90,13 @@ public class FightState implements Listener {
         log("Detected stage: " + _stageNumber);
         reconfigureDragonBossBar();
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
+
+        // Every 30 seconds remove extra dragons. YOLO.
+        Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, () -> {
+            // Probably not a good idea to exclude stage 0, since the spawn
+            // event is not fired for surplus dragons. :/
+            removeSurplusDragons();
+        }, 600, 600);
     }
 
     // ------------------------------------------------------------------------
@@ -1553,10 +1560,15 @@ public class FightState implements Listener {
      * battle.
      */
     protected void removeSurplusDragons() {
-        log("Removing surplus dragons.");
         World fightWorld = DragonUtil.getFightWorld();
         Collection<EnderDragon> dragons = fightWorld.getEntitiesByClass(EnderDragon.class);
-        log("There are currently: " + dragons.size() + " dragons.");
+        if (dragons.size() > 1) {
+            log("Removing surplus dragons.");
+            log("There are currently: " + dragons.size() + " dragons.");
+        }
+
+        // So we can enforce invulnerability invariant on the dragon we keep.
+        EnderDragon retainedDragon = null;
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getEnderDragon() == null) {
             // Assume vanilla intends the newest dragon instance to replace
@@ -1566,6 +1578,9 @@ public class FightState implements Listener {
             .collect(Collectors.toCollection(ArrayList::new));
 
             // Remove every dragon after the youngest.
+            if (dragonsByAge.size() > 0) {
+                retainedDragon = dragonsByAge.get(0);
+            }
             for (int i = 1; i < dragonsByAge.size(); ++i) {
                 EnderDragon dragon = dragonsByAge.get(i);
                 DragonUtil.removeDragon(dragon);
@@ -1573,11 +1588,16 @@ public class FightState implements Listener {
         } else {
             // Let the dragon battle keep the ender dragon it manages, remove
             // the others.
+            retainedDragon = battle.getEnderDragon();
             for (EnderDragon dragon : dragons) {
                 if (dragon != battle.getEnderDragon()) {
                     DragonUtil.removeDragon(dragon);
                 }
             }
+        }
+
+        if (retainedDragon != null) {
+            retainedDragon.setInvulnerable(_stageNumber != 11);
         }
     }
 
