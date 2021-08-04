@@ -75,7 +75,7 @@ import nu.nerd.beastmaster.mobs.MobType;
 // ----------------------------------------------------------------------------
 /**
  * Records state information about the current dragon fight.
- * 
+ *
  * Define the term "arena" to mean the space within the circle of obsidian
  * pillars in the end.
  */
@@ -118,7 +118,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/dragon info</i> command.
-     * 
+     *
      * This command is for ordinary players to check the fight status.
      */
     public void cmdPlayerInfo(CommandSender sender) {
@@ -137,10 +137,10 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/df info</i> command.
-     * 
+     *
      * Show information about the current fight: stage, owner, boss health and
      * dragon health.
-     * 
+     *
      * @param sender the command sender, for message sending.
      */
     public void cmdInfo(CommandSender sender) {
@@ -199,9 +199,9 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/df stop</i> command.
-     * 
+     *
      * Stop the current fight and clean up mobs and projectiles.
-     * 
+     *
      * @param sender the command sender, for message sending.
      */
     public void cmdStop(CommandSender sender) {
@@ -248,10 +248,10 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/df next</i> command.
-     * 
+     *
      * Remove the current stage boss and fight-associated support mobs and
      * projectiles, and skip to the next stage.
-     * 
+     *
      * @param sender the command sender, for message sending.
      */
     public void cmdNextStage(CommandSender sender) {
@@ -278,16 +278,16 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/df stage</i> command.
-     * 
+     *
      * Remove the current stage boss and fight-associated support mobs and
      * projectiles, and start the specified stage.
-     * 
+     *
      * The current implementation only supports skipping forwards - not going
      * backwards.
-     * 
-     * @param sender the command sender, for message sending.
+     *
+     * @param sender      the command sender, for message sending.
      * @param stageNumber the new stage number from 0 (stopped) to 11 (dragon
-     *        only).
+     *                    only).
      */
     public void cmdSkipToStage(CommandSender sender, int stageNumber) {
         if (stageNumber < 0 || stageNumber > 11) {
@@ -330,7 +330,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Implement the <i>/dragon prize</i> command.
-     * 
+     *
      * @param sender the command sender, for message sending.
      */
     public void cmdDragonPrize(CommandSender sender) {
@@ -364,7 +364,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Log messages.
-     * 
+     *
      * @param message the message.
      */
     public static void log(String message) {
@@ -375,7 +375,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Log debug messages.
-     * 
+     *
      * @param message the message.
      */
     public static void debug(String message) {
@@ -417,9 +417,9 @@ public class FightState implements Listener {
     /**
      * When the plugin initialises, infer the state of the fight, including the
      * stage number, based on the presence of crystals, the dragon and bosses.
-     * 
+     *
      * Find the ender crystals that are part of the current dragon fight.
-     * 
+     *
      * There is no ChunkLoadEvent for spawn chunks, so we need to scan loaded
      * chunks on startup.
      */
@@ -672,9 +672,9 @@ public class FightState implements Listener {
     /**
      * When the dragon spawns, handle it with
      * {@link #onDragonSpawn(EnderDragon)}.
-     * 
+     *
      * Track any mobs that spawn with the boss group.
-     * 
+     *
      * Handle end crystals spawns during the pillar-summoning phase only with
      * {@link #onPillarCrystalSpawn(EnderCrystal)}.
      */
@@ -707,7 +707,7 @@ public class FightState implements Listener {
             // Make the summoning crystals glowing and invulnerable to prevent
             // the player from initiating the fight and then destroying the
             // spawning crystals.
-            if (isDragonSpawnCrystalLocation(loc)) {
+            if (isDragonSpawnCrystalLocation(loc.getBlock().getRelative(0, -1, 0).getLocation())) {
                 entity.setInvulnerable(true);
                 entity.setGlowing(true);
                 entity.getScoreboardTags().add(SPAWNING_CRYSTAL_TAG);
@@ -759,7 +759,7 @@ public class FightState implements Listener {
     /**
      * When a projectile is launched by a mob with the ENTITY_TAG tag or group,
      * tag it with ENTITY_TAG so we can easily clean it up later.
-     * 
+     *
      * The dragon is tagged thus so that its projectiles can also be removed.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -782,7 +782,7 @@ public class FightState implements Listener {
     /**
      * Protect the End Crystals on the pillars and the four crystals that spawn
      * the dragon.
-     * 
+     *
      * I had some problems with setInvulnerable(); it doesn't <i>just work</i>
      * on the 10 pillar crystals. If you think you can just set them
      * invulnerable when they spawn well no, that would be way too simple. What
@@ -793,7 +793,7 @@ public class FightState implements Listener {
      * the crystals will be protected. So this crystal protection code is here
      * partly for curiosity and partly to fend off any race condition in the
      * transition.
-     * 
+     *
      * This event needs to be processed before e.g. SafeCrystals drops a
      * crystal.
      */
@@ -822,7 +822,7 @@ public class FightState implements Listener {
     /**
      * What is this madness? Two handlers for the same event?! Well, one of them
      * has to be early and the other late.
-     * 
+     *
      * We need to check the final outcome of the EntityDamageEvent in order to
      * correctly update boss state, since some other plugin may have cancelled
      * the event.
@@ -852,7 +852,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Prevent fight-relevant crystals from exploding.
-     * 
+     *
      * These will be the pillar crystals, or the dragon spawning ones. We can't
      * rely on checking for bedrock under them because of pistons.
      *
@@ -877,7 +877,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Prevent pillar crystals from being set on fire.
-     * 
+     *
      * This is easier said than done. You can cancel the event, or set the fire
      * ticks after the fact to be small so that the fire extinguishes itself
      * quickly, or both. Either way, the current 1.15.2 client just shows the
@@ -957,12 +957,12 @@ public class FightState implements Listener {
     /**
      * Prevent players from placing end crystals on bedrock in the end during
      * the SUMMONING_PILLARS phase of the dragon fight.
-     * 
+     *
      * This is a simple precaution to ensure that any crystals spawning during
      * that phase are because of the dragon fight, and not due to players.
      * EntitySpawnEvent doesn't give us a spawn reason that would disambiguate
      * the two.
-     * 
+     *
      * Also, prevent players from placing crystals in arbitrary locations on the
      * end portal frame bedrock. Crystals can only be placed in the four
      * designated "dragon spawning crystal" locations. The player gets a message
@@ -1036,7 +1036,7 @@ public class FightState implements Listener {
     /**
      * When an end crystal spawns at the start of the fight, play accompanying
      * effects and register the entity.
-     * 
+     *
      * Tag crystals that were spawned by the dragon fight to prevent us from
      * mis-identifying player-placed crystals as relevant.
      */
@@ -1061,11 +1061,11 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * When the dragon spawns, schedule the start of phase 1.
-     * 
+     *
      * We need to be careful about badly-timed restarts (as always). Since we
      * detect phases on reload by the absence of crystals, remove the crystal
      * before adding the boss.
-     * 
+     *
      * Experimentation reveals that at the time the dragon spawns, the spawning
      * crystals still exist and the RespawnPhase is NONE.
      */
@@ -1118,12 +1118,12 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * When the dragon dies:
-     * 
+     *
      * <ul>
      * <li>If the fight owner is online, put the dragon drops in that player's
      * inventory. If they are not online,
      * </ul>
-     * 
+     *
      * @param dragon the dragon that died.
      */
     protected void onDragonDeath(EnderDragon dragon) {
@@ -1179,7 +1179,7 @@ public class FightState implements Listener {
     /**
      * Give all of the specified dragon death prizes to the player, or none of
      * them if not all can fit in the player's inventory.
-     * 
+     *
      * @param player the player.
      * @param prizes the list of items to give.
      * @return true if all prizes could fit; false if they were deferred.
@@ -1192,7 +1192,7 @@ public class FightState implements Listener {
 
         // Check that the player has enough open inventory slots.
         int openSlots = (int) Stream.of(player.getInventory().getStorageContents())
-        .filter(i -> (i == null || i.getType() == Material.AIR)).count();
+            .filter(i -> (i == null || i.getType() == Material.AIR)).count();
         log(player.getName() + " has " + openSlots + " empty slots for " + prizes.size() + " items.");
 
         if (openSlots < prizes.size()) {
@@ -1220,7 +1220,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Generate all ItemStack for a single dragon prize.
-     * 
+     *
      * @return a list of ItemStacks.
      */
     protected static List<ItemStack> generatePrizes() {
@@ -1247,21 +1247,23 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Return true if the specified location is somewhere you would place an end
-     * crystal to spawn the dragon.
-     * 
+     * Return true if the specified location is that of a bedrock block where
+     * you would place an end crystal to spawn the dragon.
+     *
      * I'm not really sure how low the end portal frame can occur. In the
      * current world, the frame is at Y56. This method doesn't care about the Y
      * coordinate, as long as its clearly not bedrock down below Y6 (which only
      * occurs in custom generated terrain).
-     * 
-     * @param loc the location of an end crystal that has just spawned on
-     *        obsidian.
+     *
+     * The method checks for bedrock (which cannot be placed by an ordinary
+     * player) under the crystal and checks for the right X and Z coordinates
+     *
+     * @param loc the location of the block under an end crystal.
      * @return true if the specified location is somewhere you would place an
      *         end crystal to spawn the dragon.
      */
     protected static boolean isDragonSpawnCrystalLocation(Location loc) {
-        if (loc.getY() < 51) {
+        if (loc.getY() < 6 || loc.getBlock().getType() != Material.BEDROCK) {
             return false;
         }
 
@@ -1273,18 +1275,18 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Return all (0-4) dragon-spawning crystals currently in existence.
-     * 
+     *
      * The range on the Y coordinate is largeish because I'm not sure of the
      * limits on the end portal spawn location.
-     * 
+     *
      * @return all dragon-spawning crystals currently in existence.
      */
     protected static List<Entity> getDragonSpawnCrystals() {
         World fightWorld = DragonUtil.getFightWorld();
-        return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 57, 0), 3, 5, 3)
-        .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
-                              isDragonSpawnCrystalLocation(e.getLocation()))
-        .collect(Collectors.toList());
+        return fightWorld.getNearbyEntities(new Location(fightWorld, 0, 45, 0), 3, 40, 3)
+            .stream().filter(e -> e.getType() == EntityType.ENDER_CRYSTAL &&
+                                  isDragonSpawnCrystalLocation(e.getLocation().getBlock().getRelative(0, -1, 0).getLocation()))
+            .collect(Collectors.toList());
     }
 
     // ------------------------------------------------------------------------
@@ -1303,7 +1305,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Start the next stage.
-     * 
+     *
      * This method is called to do the boss spawning sequence for stages 1 to
      * 10.
      */
@@ -1353,10 +1355,10 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Despawn the specified number of pillar crystals.
-     * 
+     *
      * This method is used by the <i>/df next</i> and <i>/df stage</i> command
      * implementations.
-     * 
+     *
      * @param count the number of crystals to untrack and despawn.
      */
     protected void despawnPillarCrystals(int count) {
@@ -1370,11 +1372,12 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Begin the specified boss stage (1 to 11 only).
-     * 
+     *
      * Stage 0 is not supported.
-     * 
-     * @param sender the command sender for messages, or null if unused.
-     * @param stageNumber the stage number from 1 to 10.
+     *
+     * @param sender            the command sender for messages, or null if
+     *                          unused.
+     * @param stageNumber       the stage number from 1 to 10.
      * @param bossSpawnLocation the location where the bosses are spawned.
      */
     protected void startStage(CommandSender sender, int stageNumber, Location bossSpawnLocation) {
@@ -1430,9 +1433,9 @@ public class FightState implements Listener {
     /**
      * Choose a random location to spawn the boss with a 3x3x3 volume of air
      * within the arena.
-     * 
+     *
      * If a suitable location cannot be found, put it on the portal pillar.
-     * 
+     *
      * If players decide to arrange the arena to frustrate efforts to find a
      * location to spawn the boss, moderate them hard.
      */
@@ -1470,7 +1473,7 @@ public class FightState implements Listener {
     /**
      * If the specified entity is a mob, teleport it to a boss spawn location,
      * playing particle and sound effects.
-     * 
+     *
      * @param entity the mob.
      */
     protected static void returnMobToBossSpawn(MobType mobType, Entity entity) {
@@ -1482,8 +1485,8 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Play a sound effect at the location with standard options.
-     * 
-     * @param loc the location.
+     *
+     * @param loc   the location.
      * @param sound the sound.
      */
     protected void playSound(Location loc, Sound sound) {
@@ -1494,20 +1497,20 @@ public class FightState implements Listener {
     /**
      * Return the collection of players near the end portal that should see
      * titles.
-     * 
+     *
      * @return nearby players.
      */
     protected Set<Player> getNearbyPlayers() {
         World world = DragonUtil.getFightWorld();
         return world.getPlayers().stream()
-        .filter(p -> DragonUtil.getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
-        .collect(Collectors.toSet());
+            .filter(p -> DragonUtil.getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
+            .collect(Collectors.toSet());
     }
 
     // ------------------------------------------------------------------------
     /**
      * Update the BossBar for the current stage.
-     * 
+     *
      * If we're not in stage 1-10, don't show a boss bar, even if we have some
      * test bosses.
      */
@@ -1544,7 +1547,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Return the total health of all extant bosses.
-     * 
+     *
      * @return the total health of all extant bosses.
      */
     public double getTotalBossHealth() {
@@ -1554,7 +1557,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Vanilla code can randomly spawn extra dragons.
-     * 
+     *
      * Try to adapt. Not clear on when the DragonBattle has its EnderDragon
      * reference set, so let's keep at least one, even if not referenced by the
      * battle.
@@ -1574,8 +1577,8 @@ public class FightState implements Listener {
             // Assume vanilla intends the newest dragon instance to replace
             // whatever others exist. Sort into ascending order by time existed.
             List<EnderDragon> dragonsByAge = dragons.stream()
-            .sorted((d1, d2) -> d1.getTicksLived() - d2.getTicksLived())
-            .collect(Collectors.toCollection(ArrayList::new));
+                .sorted((d1, d2) -> d1.getTicksLived() - d2.getTicksLived())
+                .collect(Collectors.toCollection(ArrayList::new));
 
             // Remove every dragon after the youngest.
             if (dragonsByAge.size() > 0) {
@@ -1604,7 +1607,7 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * A repeating task that tracks boss fight participants to:
-     * 
+     *
      * <ul>
      * <li>Return bosses to the fight area when they go outside the designated
      * radius or below a certain Y coordinate.</li>
@@ -1703,7 +1706,7 @@ public class FightState implements Listener {
     /**
      * Radius in blocks on the XZ plane within which players are considered to
      * be "nearby", i.e. close enough to see titles etc.
-     * 
+     *
      * Note that only 2-D distance from the world origin is considered.
      */
     private static final double NEARBY_RADIUS = 100.0;
@@ -1737,7 +1740,7 @@ public class FightState implements Listener {
 
     /**
      * Radius in which entities are checked.
-     * 
+     *
      * This needs to be larger than BOSS_RADIUS to account for the maximum
      * distance the mob could travel in PERIOD_TICKS.
      */
@@ -1763,7 +1766,7 @@ public class FightState implements Listener {
 
     /**
      * The current set of boss mobs.
-     * 
+     *
      * Used to efficiently enforce movement limits and update the current
      * stage's boss bar.
      */
@@ -1771,9 +1774,9 @@ public class FightState implements Listener {
 
     /**
      * Current stage number.
-     * 
+     *
      * in Stage N, N crystals have been removed.
-     * 
+     *
      * Stage 0 is before the fight, Stage 1 => first crystal removed and boss
      * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
      */
