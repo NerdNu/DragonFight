@@ -45,7 +45,7 @@ commands:
       §5/<command> list§f - List all 10 stage titles and subtitles.
       §5/<command> swap <from> <to>§f - Swap two stages by stage number (1 to 10).
       §5/<command> move <from> <to>§f - Move stage <from> to stage <to> and shift in-between stages into the gap.
-      §5/<command> config <stage>§f - Show the configuration of <stage> 1 to 10.
+      §5/<command> config <stage>§f - Show the configuration of <stage> 1 to 11.
       §5/<command> config <stage> barcolor <color>§f - Configure stage bar color.
       §5/<command> config <stage> title <text>§f - Configure stage title.
       §5/<command> config <stage> subtitle <text>§f - Configure stage subtitle.

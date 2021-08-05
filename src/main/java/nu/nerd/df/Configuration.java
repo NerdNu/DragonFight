@@ -26,7 +26,7 @@ public class Configuration {
 
     /**
      * Total boss maximum health.
-     * 
+     *
      * This needs to be preserved across restarts, since a stage fight may have
      * a random number of bosses, some of which may have died. THere is no easy
      * way to work infer the total maximum boss health points in the stage after
@@ -37,7 +37,7 @@ public class Configuration {
     /**
      * The UUID of the Player who placed the last end crystal to initiate the
      * current fight.
-     * 
+     *
      * That player receives the drops.
      */
     public UUID FIGHT_OWNER;
@@ -45,7 +45,7 @@ public class Configuration {
     /**
      * A map from Player UUID to the number of unclaimed dragon kill prizes for
      * that player.
-     * 
+     *
      * The key will be absent if there are no prizes to claim.
      */
     public HashMap<UUID, Integer> UNCLAIMED_PRIZES = new HashMap<>();
@@ -55,7 +55,7 @@ public class Configuration {
      * Default constructor.
      */
     public Configuration() {
-        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+        for (int stageNumber = 1; stageNumber <= 11; ++stageNumber) {
             _stages[stageNumber - 1] = new Stage(stageNumber);
         }
     }
@@ -64,7 +64,7 @@ public class Configuration {
     /**
      * Return the stored number of unclaimed prizes for the player with the
      * specified UUID.
-     * 
+     *
      * @param playerUuid the player's UUID.
      * @return the number of unclaimed prizes accrued to the player.
      */
@@ -76,10 +76,10 @@ public class Configuration {
     /**
      * Increment the stored number of unclaimed prizes for the player with the
      * specified UUID.
-     * 
+     *
      * @param playerUuid the player's UUID.
-     * @param amount the amount to increase the count of prizes (negative to
-     *        decrement).
+     * @param amount     the amount to increase the count of prizes (negative to
+     *                   decrement).
      * @return the number of unclaimed prizes accrued to the player.
      */
     public Integer incUnclaimedPrizes(UUID playerUuid, int amount) {
@@ -92,12 +92,12 @@ public class Configuration {
     // ------------------------------------------------------------------------
     /**
      * Return a reference to the Stage with the specified stage number.
-     * 
-     * @param stageNumber the stage number, from 1 to 10.
+     *
+     * @param stageNumber the stage number, from 1 to 11.
      * @return the Stage, or null if the stage number is out of range.
      */
     public Stage getStage(int stageNumber) {
-        return (stageNumber < 1 || stageNumber > 10) ? null : _stages[stageNumber - 1];
+        return (stageNumber < 1 || stageNumber > 11) ? null : _stages[stageNumber - 1];
     }
 
     // ------------------------------------------------------------------------
@@ -132,7 +132,7 @@ public class Configuration {
             }
         }
 
-        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+        for (int stageNumber = 1; stageNumber <= 11; ++stageNumber) {
             getStage(stageNumber).load(getStageSection(stageNumber));
         }
     }
@@ -155,7 +155,7 @@ public class Configuration {
             unclaimedPrizes.set(entry.getKey().toString(), entry.getValue());
         }
 
-        for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+        for (int stageNumber = 1; stageNumber <= 11; ++stageNumber) {
             getStage(stageNumber).save(getStageSection(stageNumber));
         }
         DragonFight.PLUGIN.saveConfig();
@@ -164,8 +164,8 @@ public class Configuration {
     // ------------------------------------------------------------------------
     /**
      * Return the ConfigurationSection that encodes the specified stage.
-     * 
-     * @param stageNumber the stage number in [1,10].
+     *
+     * @param stageNumber the stage number in [1,11].
      * @return the section.
      */
     protected ConfigurationSection getStageSection(int stageNumber) {
@@ -175,10 +175,8 @@ public class Configuration {
 
     // ------------------------------------------------------------------------
     /**
-     * {@link Stage}s 1 through 10, in indices 0 through 9, respectively.
-     * 
-     * Stage 11, the dragon on its own, does not use a Stage instance.
+     * {@link Stage}s 1 through 11, in indices 0 through 10, respectively.
      */
-    protected Stage[] _stages = new Stage[10];
+    protected Stage[] _stages = new Stage[11];
 
 } // class Configuration

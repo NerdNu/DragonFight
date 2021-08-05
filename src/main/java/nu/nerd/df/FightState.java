@@ -622,7 +622,7 @@ public class FightState implements Listener {
             }
         }
 
-        // Initialise stage loot tables.
+        // Initialise stage loot tables. Stage 11 has no loot table.
         for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
             // Add the stage N boss mob loot tables, if not defined.
             String dropSetId = Stage.getDropSetId(stageNumber);
@@ -1373,8 +1373,6 @@ public class FightState implements Listener {
     /**
      * Begin the specified boss stage (1 to 11 only).
      *
-     * Stage 0 is not supported.
-     *
      * @param sender            the command sender for messages, or null if
      *                          unused.
      * @param stageNumber       the stage number from 1 to 10.
@@ -1385,23 +1383,28 @@ public class FightState implements Listener {
             sender.sendMessage(ChatColor.DARK_PURPLE + "Starting stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
         }
         _stageNumber = stageNumber;
-        if (_stageNumber == 11) {
-            startStage11();
-            return;
-        }
 
-        // Stages 1 to 10:
         Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
         log("Beginning stage: " + _stageNumber);
 
-        // Spawn boss or bosses.
-        DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
-        DropResults results = new DropResults();
-        DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
-        if (dropSet != null) {
-            dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
+        // Spawn boss or bosses. Only valid in stages 1 to 10.
+        if (_stageNumber >= 1 && _stageNumber <= 10) {
+            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
+            DropResults results = new DropResults();
+            DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
+            if (dropSet != null) {
+                dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
+            }
+            log("Mobs are spawned.");
+        } else {
+            // Stage 11. The dragon was set invulnerable in stage 1.
+            DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+            EnderDragon dragon = battle.getEnderDragon();
+            if (dragon != null) {
+                dragon.setInvulnerable(false);
+            }
+            log("Dragon is now vulnerable.");
         }
-        log("Mobs are spawned.");
 
         // Show the title.
         Set<Player> nearby = getNearbyPlayers();
@@ -1414,19 +1417,7 @@ public class FightState implements Listener {
      * Show the stage 11 titles and set the dragon vulnerable again.
      */
     protected void startStage11() {
-        log("Beginning stage 11.");
-        _stageNumber = 11;
-
-        // Show a fixed stage 11 title for the dragon.
-        getNearbyPlayers().forEach(p -> p.sendTitle(ChatColor.DARK_PURPLE + "Stage 11",
-                                                    ChatColor.LIGHT_PURPLE + "Defeat the dragon.", 10, 70, 20));
-
-        // The dragon was set invulnerable in stage 1.
-        DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
-        EnderDragon dragon = battle.getEnderDragon();
-        if (dragon != null) {
-            dragon.setInvulnerable(false);
-        }
+        startStage(null, 11, null);
     }
 
     // ------------------------------------------------------------------------
@@ -1511,10 +1502,18 @@ public class FightState implements Listener {
     /**
      * Update the BossBar for the current stage.
      *
-     * If we're not in stage 1-10, don't show a boss bar, even if we have some
-     * test bosses.
+     * If we're not in stage 1-10, don't show a custom boss bar, even if we have
+     * some test bosses.
      */
     protected void updateBossBar() {
+        if (_stageNumber >= 1 && _stageNumber <= 11) {
+            // Vanilla/Bukkit code reuses the dragon boss bar across fights, so
+            // set its colour across all stages.
+            Stage stage = DragonFight.CONFIG.getStage(11);
+            DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+            battle.getBossBar().setColor(stage.getBarColor());
+        }
+
         if (_bosses.size() == 0 || _stageNumber < 1 || _stageNumber > 10) {
             if (_bossBar != null) {
                 _bossBar.setVisible(false);
@@ -1522,7 +1521,7 @@ public class FightState implements Listener {
             return;
         }
 
-        // We have a non-zero number of bosses. Stage 1 to 10. Sow the bar.
+        // We have a non-zero number of bosses. Stage 1 to 10. Show the bar.
         Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
         if (_bossBar == null) {
             _bossBar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID, new BarFlag[0]);

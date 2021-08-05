@@ -58,3 +58,8 @@ stages:
     title: '&5Stage {}'
     subtitle: ''
     message: ''
+  '11':
+    barcolor: PINK
+    title: '&5Stage {}'
+    subtitle: '&dDefeat the dragon.'
+    message: ''

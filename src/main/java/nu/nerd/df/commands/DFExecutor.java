@@ -115,23 +115,23 @@ public class DFExecutor extends ExecutorBase {
 
             sender.sendMessage(ChatColor.DARK_PURPLE + "The following players have unclaimed prizes:");
             String players = DragonFight.CONFIG.UNCLAIMED_PRIZES.entrySet().stream()
-            .map(entry -> {
-                // OfflinePlayer never null:
-                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(entry.getKey());
-                String playerName = (offlinePlayer.getName() == null) ? offlinePlayer.getUniqueId().toString()
-                                                                      : offlinePlayer.getName();
-                return ChatColor.LIGHT_PURPLE + playerName + ChatColor.DARK_PURPLE + ": " +
-                       ChatColor.WHITE + Integer.toString(entry.getValue());
-            })
-            .sorted(String.CASE_INSENSITIVE_ORDER)
-            .collect(Collectors.joining(ChatColor.DARK_PURPLE + ", "));
+                .map(entry -> {
+                    // OfflinePlayer never null:
+                    OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(entry.getKey());
+                    String playerName = (offlinePlayer.getName() == null) ? offlinePlayer.getUniqueId().toString()
+                                                                          : offlinePlayer.getName();
+                    return ChatColor.LIGHT_PURPLE + playerName + ChatColor.DARK_PURPLE + ": " +
+                           ChatColor.WHITE + Integer.toString(entry.getValue());
+                })
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .collect(Collectors.joining(ChatColor.DARK_PURPLE + ", "));
             sender.sendMessage(players);
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "Stages:");
-            for (int stageNumber = 1; stageNumber <= 10; ++stageNumber) {
+            for (int stageNumber = 1; stageNumber <= 11; ++stageNumber) {
                 Stage stage = DragonFight.CONFIG.getStage(stageNumber);
                 sender.sendMessage(ChatColor.DARK_PURPLE + "(" + stageNumber + ") " +
                                    ChatColor.WHITE + stage.format(stage.getTitle()) +
@@ -234,7 +234,7 @@ public class DFExecutor extends ExecutorBase {
 
             Integer stageNumber = Commands.parseNumber(args[1],
                                                        Commands::parseInt,
-                                                       n -> n >= 1 && n <= 10,
+                                                       n -> n >= 1 && n <= 11,
                                                        () -> sender.sendMessage(ChatColor.RED + "The stage must be a number from 1 to 10."),
                                                        null);
             if (stageNumber == null) {
@@ -276,8 +276,8 @@ public class DFExecutor extends ExecutorBase {
                     if (listColors) {
                         sender.sendMessage(ChatColor.RED + "Colors: " +
                                            Stream.of(BarColor.values())
-                                           .map(c -> BAR_COLORS[c.ordinal()] + c.toString())
-                                           .collect(Collectors.joining(" ")));
+                                               .map(c -> BAR_COLORS[c.ordinal()] + c.toString())
+                                               .collect(Collectors.joining(" ")));
                     }
 
                 } else {
@@ -322,7 +322,7 @@ public class DFExecutor extends ExecutorBase {
     // ------------------------------------------------------------------------
     /**
      * Show usage message.
-     * 
+     *
      * @param sender the message sender.
      */
     protected void configUsage(CommandSender sender) {
