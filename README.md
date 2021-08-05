@@ -195,13 +195,13 @@ There is currently one administrative command:
 
  * `/df unclaimed` - List players with unclaimed prizes.
 
- * `/df list` - List all 10 stage titles and subtitles.
+ * `/df list` - List all 11 stage titles and subtitles.
 
  * `/df swap <from> <to>` - Swap two stages by stage number (1 to 10).
 
  * `/df move <from> <to>` - Move stage `<from>` to stage `<to>` and shift in-between stages into the gap.
 
- * `/df config <stage>` - Show the configuration of `<stage>` 1 to 10.
+ * `/df config <stage>` - Show the configuration of `<stage>` 1 to 11.
  * `/df config <stage> barcolor <color>` - Configure stage bar color.
    * Note that Minecraft only allows [7 boss bar colors](https://hub.spigotmc.org/javadocs/spigot/org/bukkit/boss/BarColor.html),
      `BLUE`, `GREEN`, `PINK`, `PURPLE`, `RED`, `WHITE` and `YELLOW`.
@@ -220,4 +220,3 @@ There is also a technical administrator command:
  * `dragonfight.admin` grants permisson to use the `/df` staff command.
  * `dragonfight.console` grants permisson to use the `/dragonfight` command to
    reload the configuration, and is only relevant to staff with console access.
-
