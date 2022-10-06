@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,6 +39,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 import org.bukkit.event.entity.EnderDragonChangePhaseEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -78,6 +79,50 @@ import nu.nerd.beastmaster.mobs.MobType;
  *
  * Define the term "arena" to mean the space within the circle of obsidian
  * pillars in the end.
+ *
+ * The vanilla/Spigot DragonBattle class has various idiosyncrasies that this
+ * plugin must work around:
+ *
+ * <ul>
+ * <li>The insurmountable problem, which I discovered last (unfortunately), is
+ * that a dragon summoned using the Bukkit API has no AI, and logically, even if
+ * it did, might not have AI tailored to the dragon fight.</li>
+ * <li>The Bukkit DragonBattle class can lose track of a dragon - perhaps it was
+ * in a chunk that was unloaded when a player logged out - and it will then
+ * spawn a replacement EnderDragon entity. Consequently, you can end up with
+ * multiple dragons.</li>
+ * <li>In a similar vein, the DragonBattle class will simply respawn a dragon
+ * entity that was remove()d through the Bukkit API. We need to use the
+ * "/minecraft:kill" command to remove dragons in a way that tells DragonBattle
+ * to back off.</li>
+ * <li>If the CreatureSpawnEvent of the ender dragon is cancelled, the
+ * DragonBattle goes into some weird state where there is no dragon, but there
+ * is a visible dragon boss bar, and ender crystals no longer summon a new
+ * dragon. The server cannot be fixed via the API (e.g.
+ * DragonBattle.setRespawnState(NONE)) or vanilla commands. Therefore, we must
+ * allow the vanilla DragonBattle class to finish spawning the dragon.</li>
+ * <li>The World.spawn() call that creates the EnderDragon does not assign the
+ * reference to it in DragonBattle until that function returns (duh!), but
+ * World.spawn() calls the function to pass EntitySpawnEvent to this plugin. So
+ * when DragonFight receives an EntitySpawnEvent for the dragon,
+ * DragonBattle.getEnderDragon() will return null until the next game tick. So
+ * when a dragon spawns, we need to wait until the next game tick to see whether
+ * the DragonBattle was the culprit.</li>
+ * <li>You cannot change the properties of the dragon spawned by DragonBattle in
+ * the EntitySpawnEvent (to make it invulnerable), perhaps because those
+ * properties are modified when World.spawn() returns. You have to wait a
+ * tick.</li>
+ * <li>You cannot set end crystals (on pillars) invulnerable until the tick
+ * after the DragonBattle spawns the vanilla dragon.</li>
+ * </ul>
+ *
+ * EnderDragon SpawnReason possibilities:
+ * <ul>
+ * <li>DEFAULT signifies that the dragon was summoned by ender crystals (vanilla
+ * dragon fight).</li>
+ * <li>CUSTOM signifies that the dragon was summoned by a plugin.</li>
+ * </ul>
+ *
  */
 public class FightState implements Listener {
     // ------------------------------------------------------------------------
@@ -86,9 +131,14 @@ public class FightState implements Listener {
      */
     public void onEnable() {
         defineBeastMasterObjects();
-        discoverFightState();
-        log("Detected stage: " + _stageNumber);
-        reconfigureDragonBossBar();
+
+        // Force load chunks in the end, then wait a few seconds and hope that
+        // the entities are loaded. There is no way to force-load entities.
+        preLoadEndChunks();
+        Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> {
+            recoverFightState();
+            reconfigureDragonBossBar();
+        }, 100);
         Bukkit.getScheduler().scheduleSyncRepeatingTask(DragonFight.PLUGIN, _tracker, TrackerTask.PERIOD_TICKS, TrackerTask.PERIOD_TICKS);
 
         // Every 30 seconds remove extra dragons. YOLO.
@@ -106,32 +156,108 @@ public class FightState implements Listener {
     public void onDisable() {
         Bukkit.getScheduler().cancelTasks(DragonFight.PLUGIN);
 
-        // If restarting while the dragon is spawning, blow it all away and log
-        // it so the admins can refund.
+        // If 4 crystals are placed and there is a restart, I'm not sure if
+        // the dragon will respawn after the restart. Log the situation so an
+        // admin refund is possible.
         List<Entity> spawningCrystals = getDragonSpawnCrystals();
         if (spawningCrystals.size() == 4) {
-            log("Stopping the fight due to restart.");
+            log("The server is restarting during dragon spawn (4 crystals placed).");
             cmdStop(Bukkit.getConsoleSender());
         }
     }
 
     // ------------------------------------------------------------------------
     /**
-     * Implement the <i>/dragon info</i> command.
+     * Return true if a dragon fight is currently underway.
      *
-     * This command is for ordinary players to check the fight status.
+     * @return true if a fight is happening.
      */
-    public void cmdPlayerInfo(CommandSender sender) {
-        if (_stageNumber == 0 || DragonFight.CONFIG.FIGHT_OWNER == null) {
-            sender.sendMessage(ChatColor.DARK_PURPLE + "Nobody is fighting the dragon right now.");
-            return;
-        } else {
-            sender.sendMessage(ChatColor.DARK_PURPLE + "The current fight stage is " +
-                               ChatColor.LIGHT_PURPLE + _stageNumber + ChatColor.DARK_PURPLE + ".");
-            OfflinePlayer fightOwner = Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER);
-            sender.sendMessage(ChatColor.DARK_PURPLE + "The final drops are owned by " +
-                               ChatColor.LIGHT_PURPLE + fightOwner.getName() + ChatColor.DARK_PURPLE + ".");
+    public boolean isFightHappening() {
+        return DragonFight.CONFIG.STAGE_NUMBER > 0;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return true when the stage number is changing to
+     * {@link Configuration#NEW_STAGE_NUMBER}.
+     *
+     * @return true when the stage number is changing.
+     */
+    public boolean isStageNumberChanging() {
+        return getStageNumber() != getNewStageNumber();
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Finish the change of stage number to
+     * {@link Configuration#NEW_STAGE_NUMBER}.
+     */
+    public void finishStageNumberChange() {
+        setStageNumber(getNewStageNumber());
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Immediately change to the specified stage number.
+     *
+     * {@link Configuration#NEW_STAGE_NUMBER} is also immediately set to the new
+     * stage number to signify the transition is complete.
+     *
+     * @param stageNumber the new stage number.
+     */
+    public void immediatelyChangeStageNumber(int stageNumber) {
+        setStageNumber(stageNumber);
+        setNewStageNumber(stageNumber);
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Get the current fight stage number.
+     *
+     * @return 0 for no fight, or 1 to 11 for the various fight stages.
+     */
+    public int getStageNumber() {
+        return DragonFight.CONFIG.STAGE_NUMBER;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Set the fight stage number.
+     *
+     * @param stageNumber the new stage number.
+     */
+    public void setStageNumber(int stageNumber) {
+        if (stageNumber < 0 || stageNumber > 11) {
+            throw new IllegalArgumentException("invalid stage number: " + stageNumber);
         }
+        DragonFight.CONFIG.STAGE_NUMBER = stageNumber;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Get the new fight stage number.
+     *
+     * The stage number changes to this new value after mob spawn animations.
+     *
+     * @return 0 for no fight, or 1 to 11 for the various fight stages.
+     */
+    public int getNewStageNumber() {
+        return DragonFight.CONFIG.NEW_STAGE_NUMBER;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Set the new fight stage number.
+     *
+     * The stage number changes to this new value after mob spawn animations.
+     *
+     * @param stageNumber the new stage number.
+     */
+    public void setNewStageNumber(int stageNumber) {
+        if (stageNumber < 0 || stageNumber > 11) {
+            throw new IllegalArgumentException("invalid stage number: " + stageNumber);
+        }
+        DragonFight.CONFIG.NEW_STAGE_NUMBER = stageNumber;
     }
 
     // ------------------------------------------------------------------------
@@ -145,8 +271,12 @@ public class FightState implements Listener {
      */
     public void cmdInfo(CommandSender sender) {
         sender.sendMessage(ChatColor.DARK_PURPLE + "The current fight stage is " +
-                           ChatColor.LIGHT_PURPLE + _stageNumber + ChatColor.DARK_PURPLE + ".");
-        if (_stageNumber == 0) {
+                           ChatColor.LIGHT_PURPLE + getStageNumber() + ChatColor.DARK_PURPLE + ".");
+        if (isStageNumberChanging()) {
+            sender.sendMessage(ChatColor.DARK_PURPLE + "The fight stage is changing to " +
+                               ChatColor.LIGHT_PURPLE + DragonFight.CONFIG.NEW_STAGE_NUMBER + ChatColor.DARK_PURPLE + ".");
+        }
+        if (!isFightHappening()) {
             return;
         }
 
@@ -159,7 +289,7 @@ public class FightState implements Listener {
                                ChatColor.LIGHT_PURPLE + fightOwner.getName() + ChatColor.DARK_PURPLE + ".");
         }
 
-        if (_stageNumber >= 1 && _stageNumber <= 10) {
+        if (getStageNumber() >= 1 && getStageNumber() <= 10) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "The current total boss health is " +
                                ChatColor.LIGHT_PURPLE + String.format("%.1f", getTotalBossHealth()) +
                                ChatColor.DARK_PURPLE + " out of " +
@@ -232,13 +362,15 @@ public class FightState implements Listener {
         sender.sendMessage(ChatColor.DARK_PURPLE + "Removed pillar crystals: " + ChatColor.LIGHT_PURPLE + _crystals.size());
         _crystals.clear();
 
-        cleanUp(sender);
-        _stageNumber = 0;
+        cleanUpMobsAndProjectiles(sender);
 
         // Immediately hide the boss bar, rather than waiting for update.
         if (_bossBar != null) {
             _bossBar.setVisible(false);
         }
+
+        // Clear stage numbers prior to config save.
+        immediatelyChangeStageNumber(0);
 
         // Nobody owns the drops, even if a dragon randomly spawns for funsies.
         DragonFight.CONFIG.FIGHT_OWNER = null;
@@ -262,17 +394,17 @@ public class FightState implements Listener {
             return;
         }
 
-        int nextStage = (_stageNumber + 1) % 12;
+        int nextStage = (getStageNumber() + 1) % 12;
         if (nextStage == 0) {
             cmdStop(sender);
             return;
         }
 
-        cleanUp(sender);
+        cleanUpMobsAndProjectiles(sender);
         despawnPillarCrystals(1);
 
         // Skip to the next stage.
-        startStage(sender, _stageNumber + 1, getBossSpawnLocation());
+        startStage(sender, getStageNumber() + 1, getBossSpawnLocation());
     }
 
     // ------------------------------------------------------------------------
@@ -300,65 +432,30 @@ public class FightState implements Listener {
             return;
         }
 
-        if (stageNumber < _stageNumber) {
+        if (stageNumber < getStageNumber()) {
             sender.sendMessage(ChatColor.RED + "Skipping backwards is not currently supported.");
             return;
         }
 
-        if (stageNumber == _stageNumber) {
+        if (stageNumber == getStageNumber()) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "You're already in stage " +
                                ChatColor.LIGHT_PURPLE + stageNumber + ChatColor.DARK_PURPLE + ".");
             return;
         }
 
-        // So from here on, stageNumber > _stageNumber.
+        // So from here on, stageNumber > getStageNumber().
         World fightWorld = DragonUtil.getFightWorld();
         DragonBattle battle = fightWorld.getEnderDragonBattle();
         if (battle.getEnderDragon() == null) {
             sender.sendMessage(ChatColor.RED + "You have to spawn the dragon first, using end crystals.");
             return;
-        } else {
-            // Going from stage > 0 to a higher number.
-            cleanUp(sender);
         }
 
-        int skippedStages = stageNumber - _stageNumber;
+        cleanUpMobsAndProjectiles(sender);
+
+        int skippedStages = stageNumber - getStageNumber();
         despawnPillarCrystals(skippedStages);
-        startStage(sender, stageNumber, getBossSpawnLocation());
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Implement the <i>/dragon prize</i> command.
-     *
-     * @param sender the command sender, for message sending.
-     */
-    public void cmdDragonPrize(CommandSender sender) {
-        Player player = (Player) sender;
-        UUID playerUuid = player.getUniqueId();
-
-        int unclaimed = DragonFight.CONFIG.getUnclaimedPrizes(playerUuid);
-        if (unclaimed <= 0) {
-            sender.sendMessage(ChatColor.DARK_PURPLE + "You don't have any unclaimed dragon prizes.");
-        } else {
-            List<ItemStack> prizes = generatePrizes();
-            if (givePrizes(player, prizes)) {
-                DragonFight.CONFIG.incUnclaimedPrizes(playerUuid, -1);
-                DragonFight.CONFIG.save();
-
-                if (--unclaimed > 0) {
-                    String prizeCount = ChatColor.LIGHT_PURPLE + Integer.toString(unclaimed) +
-                                        ChatColor.DARK_PURPLE + " unclaimed prize" + (unclaimed > 1 ? "s" : "");
-                    sender.sendMessage(ChatColor.DARK_PURPLE + "You still have " + prizeCount + ".");
-                }
-            } else {
-                // The item(s) did not fit.
-                String slots = ChatColor.LIGHT_PURPLE + Integer.toString(prizes.size()) +
-                               ChatColor.DARK_PURPLE + " inventory slot" + (prizes.size() > 1 ? "s" : "");
-                player.sendMessage(ChatColor.DARK_PURPLE + "You need at least " + slots + " empty.");
-                player.sendMessage(ChatColor.DARK_PURPLE + "Make some room in your inventory and try again.");
-            }
-        }
+        startStage(sender, stageNumber, stageNumber == 11 ? null : getBossSpawnLocation());
     }
 
     // ------------------------------------------------------------------------
@@ -388,7 +485,7 @@ public class FightState implements Listener {
      * Clean up mobs and projectiles and message the command sender with tallies
      * of entities removed.
      */
-    protected void cleanUp(CommandSender sender) {
+    protected void cleanUpMobsAndProjectiles(CommandSender sender) {
         int projectileCount = 0;
         int bossCount = 0;
         int supportCount = 0;
@@ -415,35 +512,72 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * When the plugin initialises, infer the state of the fight, including the
-     * stage number, based on the presence of crystals, the dragon and bosses.
+     * Load relevant end chunks when the plugin loads.
      *
-     * Find the ender crystals that are part of the current dragon fight.
+     * As of Minecraft 1.17, loading a chunk does not immediately load the
+     * entities therein; they are loaded asynchronously, some time later. There
+     * is no method within the 1.18 Bukkit API to forcibly load those entities
+     * synchronously.
      *
-     * There is no ChunkLoadEvent for spawn chunks, so we need to scan loaded
-     * chunks on startup.
+     * On startup, we need to add all the end crystals to the {@link #_crystals}
+     * array. So this method starts the ball rolling on loading them and we
+     * check for them a few seconds later in {@link recoverFightState()}.
+     *
+     * References:
+     * <ul>
+     * <li>https://github.com/PaperMC/Paper/issues/5872</li>
+     * <li>https://hub.spigotmc.org/jira/browse/SPIGOT-6547</li>
+     * <li>https://hub.spigotmc.org/jira/browse/SPIGOT-6934</li>
+     * </ul>
      */
-    protected void discoverFightState() {
+    protected void preLoadEndChunks() {
         World fightWorld = DragonUtil.getFightWorld();
-        DragonBattle battle = fightWorld.getEnderDragonBattle();
 
         // Preload chunks to ensure we find the crystals.
         int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
         for (int x = -chunkRange; x <= chunkRange; ++x) {
             for (int z = -chunkRange; z <= chunkRange; ++z) {
                 Chunk chunk = fightWorld.getChunkAt(x, z);
-                // Keep the chunk loaded until we can get some consistency
-                // checking implemented. Even if not the real problem.
-                fightWorld.loadChunk(chunk);
+                chunk.addPluginChunkTicket(DragonFight.PLUGIN);
+                chunk.setForceLoaded(true);
+                chunk.load();
+            }
+        }
+    }
 
+    // ------------------------------------------------------------------------
+    /**
+     * When the plugin initialises, infer the state of the fight, including the
+     * stage number, based on the presence of crystals, the dragon and bosses.
+     * Then reconcile the inferred stage number with that saved in the config.
+     *
+     * Find the ender crystals that are part of the current dragon fight.
+     *
+     * There is no ChunkLoadEvent for spawn chunks, so we need to scan loaded
+     * chunks on startup.
+     */
+    protected void recoverFightState() {
+        World fightWorld = DragonUtil.getFightWorld();
+        DragonBattle battle = fightWorld.getEnderDragonBattle();
+
+        if (battle.getEnderDragon() != null) {
+            log("Dragon " + battle.getEnderDragon().getUniqueId() + " exists.");
+        } else {
+            log("No dragon exists.");
+        }
+
+        // Preload chunks to ensure we find the crystals.
+        int chunkRange = (int) Math.ceil(TRACKED_RADIUS / 16);
+        for (int x = -chunkRange; x <= chunkRange; ++x) {
+            for (int z = -chunkRange; z <= chunkRange; ++z) {
+                Chunk chunk = fightWorld.getChunkAt(x, z);
                 for (Entity entity : chunk.getEntities()) {
-                    if (entity instanceof EnderCrystal &&
-                        entity.getScoreboardTags().contains(PILLAR_CRYSTAL_TAG)) {
-                        log("Loaded crystal " + entity.getUniqueId() + " at " + Util.formatLocation(entity.getLocation()));
+                    if (entity instanceof EnderCrystal && entity.getScoreboardTags().contains(PILLAR_CRYSTAL_TAG)) {
                         _crystals.add((EnderCrystal) entity);
-                        // In case the restart happened immediately after the
-                        // crystal spawned.
+                        // In case the restart happened immediately after
+                        // the crystal spawned.
                         entity.setInvulnerable(true);
+
                     } else if (entity instanceof LivingEntity) {
                         // Find bosses within the discoverable range.
                         if (DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
@@ -454,43 +588,22 @@ public class FightState implements Listener {
             }
         }
         log("Discovered bosses: " + _bosses.size());
+        log("Discovered crystals: " + _crystals.size());
 
-        if (battle.getEnderDragon() != null) {
-            log("Dragon " + battle.getEnderDragon().getUniqueId() + " exists.");
-        } else {
-            log("No dragon exists.");
+        if (getStageNumber() < 0 || getStageNumber() > 11) {
+            log("Stage number " + getStageNumber() + " is out of bounds. Setting to 0.");
+            immediatelyChangeStageNumber(0);
         }
 
-        // Work out what stage we're in.
-        // The dragon can randomly despawn. Make a best guess.
-        // Eventually will rewrite to load from config.
-        if (battle.getEnderDragon() == null && _bosses.isEmpty() && _crystals.isEmpty()) {
-            log("No dragon, bosses or pillar crystals. Guess stage 0.");
-            _stageNumber = 0;
-        } else {
-            // We hope that vanilla code respawns the dragon at some point.
-            _stageNumber = 10 - _crystals.size();
-            log("Intial guess stage " + _stageNumber);
-        }
-
-        // A restart during the stage start spawn sequence can leave us
-        // without bosses.
-        if (battle.getEnderDragon() != null && _bosses.isEmpty()) {
-            if (_stageNumber == 0) {
-                // We have a dragon and 10 pillar crystals. Start stage 1.
-                log("Restarting stage 1 spawn sequence after restart.");
-                nextStage();
-            } else if (_stageNumber < 10) { // _stageNumber 1-9
-                // 1 - 9 pillar crystals and no bosses.
-                log("Restarting stage " + (_stageNumber + 1) + " spawn sequence after restart.");
-                nextStage();
-            } else if (_stageNumber == 10) {
-                // We have a dragon, 0 pillar crystals and no bosses.
-                // The difference between stage 10 and 11 is that in 11 there
-                // are no boss mobs.
-                // Show titles again. Make dragon vulnerable.
-                log("In stage " + 11 + ".");
-                startStage11();
+        log("Current stage: " + getStageNumber());
+        if (isStageNumberChanging()) {
+            log("Transitioning from stage " + getStageNumber() + " to stage " + getNewStageNumber());
+            if (getNewStageNumber() != getStageNumber() + 1) {
+                log("Too many skipped stages! Going direct to " + getNewStageNumber() + ".");
+                startStage(null, getNewStageNumber(), getNewStageNumber() == 11 ? null : getBossSpawnLocation());
+            } else {
+                // Normal path... show boss spawn animations.
+                animateNextStage();
             }
         }
     }
@@ -675,6 +788,37 @@ public class FightState implements Listener {
      *
      * Track any mobs that spawn with the boss group.
      *
+     * @param event the event.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    protected void onCreatureSpawn(CreatureSpawnEvent event) {
+        Location loc = event.getLocation();
+        World world = loc.getWorld();
+        if (!DragonUtil.isFightWorld(world)) {
+            return;
+        }
+
+        Entity entity = event.getEntity();
+
+        // Track the bosses. These might be dragons, but are not THE dragon.
+        if (DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
+            LivingEntity boss = (LivingEntity) entity;
+            MobType bossMobType = BeastMaster.getMobType(boss);
+            log("Boss spawned: " + bossMobType.getId());
+            _bosses.add(boss);
+            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH += boss.getMaxHealth();
+        } else {
+            // Pass vanilla (DragonBattle) dragon spawns (not plugin spawns) to
+            // onDragonSpawn().
+            SpawnReason reason = event.getSpawnReason();
+            if (reason == SpawnReason.DEFAULT && entity instanceof EnderDragon) {
+                onDragonSpawn((EnderDragon) entity, reason);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Handle end crystals spawns during the pillar-summoning phase only with
      * {@link #onPillarCrystalSpawn(EnderCrystal)}.
      */
@@ -687,22 +831,6 @@ public class FightState implements Listener {
         }
 
         Entity entity = event.getEntity();
-        if (entity instanceof EnderDragon) {
-            // Tag dragon as fight entity so its projectiles inherit that tag.
-            entity.getScoreboardTags().add(ENTITY_TAG);
-            onDragonSpawn((EnderDragon) entity);
-        }
-
-        // Track the bosses.
-        if (entity instanceof LivingEntity && DragonUtil.hasTagOrGroup(entity, BOSS_TAG)) {
-            LivingEntity boss = (LivingEntity) entity;
-            MobType bossMobType = BeastMaster.getMobType(boss);
-            log("Boss spawned: " + bossMobType.getId());
-            _bosses.add(boss);
-            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH += boss.getMaxHealth();
-        }
-
-        DragonBattle battle = world.getEnderDragonBattle();
         if (entity instanceof EnderCrystal) {
             // Make the summoning crystals glowing and invulnerable to prevent
             // the player from initiating the fight and then destroying the
@@ -714,6 +842,7 @@ public class FightState implements Listener {
             }
 
             // Register and protect crystals spawned on the pillars.
+            DragonBattle battle = world.getEnderDragonBattle();
             if (battle.getRespawnPhase() == RespawnPhase.SUMMONING_PILLARS &&
                 DragonUtil.isOnPillarCircle(entity.getLocation())) {
                 onPillarCrystalSpawn((EnderCrystal) entity);
@@ -781,7 +910,12 @@ public class FightState implements Listener {
     // ------------------------------------------------------------------------
     /**
      * Protect the End Crystals on the pillars and the four crystals that spawn
-     * the dragon.
+     * the dragon, and protect the dragon in stages 1 to 10.
+     *
+     * You might think that you could just call setInvulnerable(true) on the
+     * dragon to make it invulnerable. Perhaps in a periodic task like the
+     * {@link FightState#Tracker}. You would be wrong; having setInvulnerable()
+     * work as advertised is just wishful thinking.
      *
      * I had some problems with setInvulnerable(); it doesn't <i>just work</i>
      * on the 10 pillar crystals. If you think you can just set them
@@ -806,7 +940,12 @@ public class FightState implements Listener {
             return;
         }
 
-        if (entity instanceof EnderCrystal) {
+        if (entity instanceof EnderDragon && getStageNumber() < 11) {
+            DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
+            if (entity == battle.getEnderDragon()) {
+                event.setCancelled(true);
+            }
+        } else if (entity instanceof EnderCrystal) {
             if (_crystals.contains(entity) ||
                 DragonUtil.hasTagOrGroup(entity, PILLAR_CRYSTAL_TAG) ||
                 DragonUtil.hasTagOrGroup(entity, SPAWNING_CRYSTAL_TAG)) {
@@ -911,8 +1050,6 @@ public class FightState implements Listener {
 
         if (event.getEntity() instanceof EnderDragon) {
             onDragonDeath((EnderDragon) event.getEntity());
-            // TODO: clean up associated entities?
-            _stageNumber = 0;
             return;
         }
 
@@ -923,13 +1060,9 @@ public class FightState implements Listener {
             log("Boss died: " + bossMobType.getId());
         }
 
-        if (_stageNumber != 0 && bossDied && _bosses.isEmpty()) {
-            if (_stageNumber == 10) {
-                // Just the dragon in stage 11.
-                startStage11();
-            } else {
-                nextStage();
-            }
+        // The fight is going and all the bosses are dead. Next stage!
+        if (isFightHappening() && bossDied && _bosses.isEmpty()) {
+            animateNextStage();
         }
     }
 
@@ -1060,35 +1193,32 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * When the dragon spawns, schedule the start of phase 1.
+     * This method responds to an ender dragon spawning.
      *
-     * We need to be careful about badly-timed restarts (as always). Since we
-     * detect phases on reload by the absence of crystals, remove the crystal
-     * before adding the boss.
+     * At the time this method is called, the dragon entity is not yet
+     * associated with the Bukkit DragonBattle instance, because we're executing
+     * in the context of a CreatureSpawnEvent, which is effectively a
+     * synchronous function call from World.spawn(). We would need to wait for 1
+     * tick if we needed to access the dragon through the DragonBattle's methods
+     * (note the called methods too).
      *
-     * Experimentation reveals that at the time the dragon spawns, the spawning
-     * crystals still exist and the RespawnPhase is NONE.
+     * @param dragon the dragon.
+     * @param reason the reason for spawning.
      */
-    protected void onDragonSpawn(EnderDragon dragon) {
-        log("Dragon " + dragon.getUniqueId() + " spawned.");
+    protected void onDragonSpawn(EnderDragon dragon, SpawnReason reason) {
+        log("Dragon spawned (" + reason + "): " + dragon.getUniqueId());
+
+        // Tag dragon as fight entity so its projectiles inherit that tag.
+        dragon.getScoreboardTags().add(ENTITY_TAG);
+
+        // Doesn't do anything. See onEntityDamageEarly().
+        dragon.setInvulnerable(true);
 
         // Remove surplus dragons after this one is added to the world.
         Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN, () -> removeSurplusDragons(), 2);
 
-        // debug("Dragon spawned. Spawning crystals: " +
-        // getDragonSpawnCrystals());
-        // debug("Respawn phase: " +
-        if (_crystals.size() == 0) {
-            // Observed once in testing. Don't set invulnerable.
-            log("Dragon spawned but there were no ender crystals?!");
-        } else {
-            // The dragon is invulnerable for stages 1 through 10.
-            // NOTE: creative mode trumps invulnerability.
-            dragon.setInvulnerable(true);
-        }
-
         // Setting the crystals invulnerable before the dragon spawns does not
-        // work. But Minecraft prevents them from being da maged.
+        // work. But Minecraft prevents them from being damaged.
         // Cannot set them invulnerable this tick either.
         for (EnderCrystal crystal : _crystals) {
             Bukkit.getScheduler().runTaskLater(DragonFight.PLUGIN,
@@ -1096,22 +1226,8 @@ public class FightState implements Listener {
         }
         reconfigureDragonBossBar();
 
-        // Since extra dragons can spawn randomly mid-fight, we should only
-        // advance to the next stage if there are no bosses.
-        if (_stageNumber == 0 && _bosses.isEmpty()) {
-            log("Stage 0, no bosses, new dragon.");
-            // We may have previously inferred the stage to be 0 based on an
-            // absence of the dragon, crystals and bosses. if there are 10
-            // crystals and no bosses, we're going from stage 0 to stage 1.
-            if (_crystals.size() == 10) {
-                log("All 10 crystals, no bosses, new dragon. Go go to stage 1.");
-                nextStage();
-            } else if (_crystals.size() == 0) {
-                log("No crystals, no bosses, new dragon. Must be in stage 11.");
-                startStage11();
-            }
-        } else {
-            log("Stay in this stage. Bosses: " + _bosses.size() + ", Crystals: " + _crystals.size());
+        if (getStageNumber() == 0) {
+            animateNextStage();
         }
     }
 
@@ -1129,10 +1245,15 @@ public class FightState implements Listener {
     protected void onDragonDeath(EnderDragon dragon) {
         log("The dragon died.");
 
-        if (_stageNumber != 11) {
+        if (getStageNumber() != 11) {
             log("But we're not in stage 11, so it doesn't count.");
             return;
         }
+
+        // In stage 11, the dragon died. Signify that the fight is over before
+        // saving the config.
+        immediatelyChangeStageNumber(0);
+        // TODO: clean up associated entities?
 
         if (DragonFight.CONFIG.FIGHT_OWNER == null) {
             log("But nobody owns the fight, so it doesn't count.");
@@ -1184,7 +1305,7 @@ public class FightState implements Listener {
      * @param prizes the list of items to give.
      * @return true if all prizes could fit; false if they were deferred.
      */
-    protected static boolean givePrizes(Player player, List<ItemStack> prizes) {
+    public static boolean givePrizes(Player player, List<ItemStack> prizes) {
         if (prizes.size() == 0) {
             log("No dragon drops have been configured!");
             return true;
@@ -1223,7 +1344,7 @@ public class FightState implements Listener {
      *
      * @return a list of ItemStacks.
      */
-    protected static List<ItemStack> generatePrizes() {
+    public static List<ItemStack> generatePrizes() {
         ArrayList<ItemStack> prizes = new ArrayList<>();
         DropSet dropSet = BeastMaster.LOOTS.getDropSet("df-dragon-drops");
         Drop drop = dropSet.chooseOneDrop(true);
@@ -1304,12 +1425,22 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
-     * Start the next stage.
+     * Start the next boss stage by showing the boss spawn animations.
      *
      * This method is called to do the boss spawning sequence for stages 1 to
      * 10.
      */
-    protected void nextStage() {
+    protected void animateNextStage() {
+        setNewStageNumber(getStageNumber() + 1);
+
+        // When going to stage 11 (dragon only) there are no bosses to spawn.
+        // Just call startStage() and return.
+        if (getNewStageNumber() == 11) {
+            startStage(null, getNewStageNumber(), null);
+            return;
+        }
+
+        // From here forward, getNewStageNumber() is between 1 and 10.
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
 
@@ -1344,11 +1475,11 @@ public class FightState implements Listener {
             playSound(bossSpawnLocation, Sound.BLOCK_BEACON_ACTIVATE);
         }, STAGE_START_DELAY * 80 / 100);
 
-        // Remove the crystal and spawn the boss. Only called for stage 1-10.
+        // Remove the crystal and spawn the boss.
         Bukkit.getScheduler().scheduleSyncDelayedTask(DragonFight.PLUGIN, () -> {
             _crystals.remove(replacedCrystal);
             replacedCrystal.remove();
-            startStage(null, _stageNumber + 1, bossSpawnLocation);
+            startStage(null, getNewStageNumber(), bossSpawnLocation);
         }, STAGE_START_DELAY);
     }
 
@@ -1373,23 +1504,29 @@ public class FightState implements Listener {
     /**
      * Begin the specified boss stage (1 to 11 only).
      *
+     * In the case of stages 1 through 10, the boss mob is spawned.
+     *
      * @param sender            the command sender for messages, or null if
      *                          unused.
-     * @param stageNumber       the stage number from 1 to 10.
+     * @param stageNumber       the stage number from 1 to 11.
      * @param bossSpawnLocation the location where the bosses are spawned.
      */
     protected void startStage(CommandSender sender, int stageNumber, Location bossSpawnLocation) {
+        // The new stage number will (in many but not all cases) have already
+        // been set to stageNumber arg. Ensure that all stage numbers are in
+        // sync.
+        immediatelyChangeStageNumber(stageNumber);
+
         if (sender != null) {
             sender.sendMessage(ChatColor.DARK_PURPLE + "Starting stage: " + ChatColor.LIGHT_PURPLE + stageNumber);
         }
-        _stageNumber = stageNumber;
 
-        Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
-        log("Beginning stage: " + _stageNumber);
+        Stage stage = DragonFight.CONFIG.getStage(getStageNumber());
+        log("Beginning stage: " + getStageNumber());
 
         // Spawn boss or bosses. Only valid in stages 1 to 10.
-        if (_stageNumber >= 1 && _stageNumber <= 10) {
-            DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
+        DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
+        if (getStageNumber() >= 1 && getStageNumber() <= 10) {
             DropResults results = new DropResults();
             DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
             if (dropSet != null) {
@@ -1410,14 +1547,6 @@ public class FightState implements Listener {
         Set<Player> nearby = getNearbyPlayers();
         log(nearby.size() + " players nearby.");
         stage.announce(nearby);
-    }
-
-    // ------------------------------------------------------------------------
-    /**
-     * Show the stage 11 titles and set the dragon vulnerable again.
-     */
-    protected void startStage11() {
-        startStage(null, 11, null);
     }
 
     // ------------------------------------------------------------------------
@@ -1506,7 +1635,7 @@ public class FightState implements Listener {
      * some test bosses.
      */
     protected void updateBossBar() {
-        if (_stageNumber >= 1 && _stageNumber <= 11) {
+        if (getStageNumber() >= 1 && getStageNumber() <= 11) {
             // Vanilla/Bukkit code reuses the dragon boss bar across fights, so
             // set its colour across all stages.
             Stage stage = DragonFight.CONFIG.getStage(11);
@@ -1514,7 +1643,7 @@ public class FightState implements Listener {
             battle.getBossBar().setColor(stage.getBarColor());
         }
 
-        if (_bosses.size() == 0 || _stageNumber < 1 || _stageNumber > 10) {
+        if (_bosses.size() == 0 || getStageNumber() < 1 || getStageNumber() > 10) {
             if (_bossBar != null) {
                 _bossBar.setVisible(false);
             }
@@ -1522,7 +1651,7 @@ public class FightState implements Listener {
         }
 
         // We have a non-zero number of bosses. Stage 1 to 10. Show the bar.
-        Stage stage = DragonFight.CONFIG.getStage(_stageNumber);
+        Stage stage = DragonFight.CONFIG.getStage(getStageNumber());
         if (_bossBar == null) {
             _bossBar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID, new BarFlag[0]);
         }
@@ -1599,7 +1728,8 @@ public class FightState implements Listener {
         }
 
         if (retainedDragon != null) {
-            retainedDragon.setInvulnerable(_stageNumber != 11);
+            // Doesn't do anything. See onEntityDamageEarly().
+            retainedDragon.setInvulnerable(getStageNumber() != 11);
         }
     }
 
@@ -1688,12 +1818,16 @@ public class FightState implements Listener {
     private static final String ENTITY_TAG = "df-entity";
 
     /**
-     * Group of summoned boss mobs on spawn.
+     * Group tag of summoned boss mobs on spawn.
+     *
+     * Note that the final boss enderdragon is not allowed to have this tag.
+     * Note also that per-stage boss mobs can be enderdragons, but they are not
+     * the final boss.
      */
     private static final String BOSS_TAG = "df-boss";
 
     /**
-     * Group of support mobs summoned by bosses.
+     * Group tag of support mobs summoned by bosses.
      */
     private static final String SUPPORT_TAG = "df-support";
 
@@ -1770,16 +1904,6 @@ public class FightState implements Listener {
      * stage's boss bar.
      */
     protected HashSet<LivingEntity> _bosses = new HashSet<>();
-
-    /**
-     * Current stage number.
-     *
-     * in Stage N, N crystals have been removed.
-     *
-     * Stage 0 is before the fight, Stage 1 => first crystal removed and boss
-     * spawned. Stage 10 => final boss spawned. Stage 11: dragon.
-     */
-    int _stageNumber;
 
     /**
      * Tracks mobs to enforce boundaries and update boss bars.

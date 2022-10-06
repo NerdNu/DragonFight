@@ -3,6 +3,8 @@ settings:
   debug-prefix: '&5[DragonFight &fDBG&5]&f'
 
 state:
+  stage-number: 0
+  new-stage-number: 0
   total-boss-max-health: 0
   fight-owner:
   unclaimed-prizes: {}

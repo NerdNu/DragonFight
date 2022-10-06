@@ -38,7 +38,8 @@ public class DragonFight extends JavaPlugin {
     public void onEnable() {
         PLUGIN = this;
         saveDefaultConfig();
-        CONFIG.reload();
+        CONFIG.reloadConfiguration();
+        CONFIG.reloadFightState();
 
         addCommandExecutor(new DFExecutor());
         addCommandExecutor(new DragonExecutor());
@@ -61,7 +62,7 @@ public class DragonFight extends JavaPlugin {
     // ------------------------------------------------------------------------
     /**
      * Add the specified CommandExecutor and set it as its own TabCompleter.
-     * 
+     *
      * @param executor the CommandExecutor.
      */
     protected void addCommandExecutor(ExecutorBase executor) {
