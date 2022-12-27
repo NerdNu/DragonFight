@@ -223,7 +223,7 @@ There is currently one administrative command:
 
 ### Stage Text Substitution
 
-Titles, subtitles and messages and commands accept `&c`-style [formatting codes](https://minecraft.gamepedia.com/Formatting_codes#Color_codes).
+Titles, subtitles, messages and commands accept `&c`-style [formatting codes](https://minecraft.gamepedia.com/Formatting_codes#Color_codes).
 They are also subject to variable substitution as tabulated below.
 
 | Variable | Applied To        | Substitution Text |
@@ -243,7 +243,7 @@ They are also subject to variable substitution as tabulated below.
 | %bx.%    | all commmands     | The floating point X coordinate (to three decimal places) of the spawn location of the bosses. |
 | %by.%    | all commmands     | The floating point Y coordinate (to three decimal places) of the spawn location of the bosses. |
 | %bz.%    | all commmands     | The floating point Z coordinate (to three decimal places) of the spawn location of the bosses. |
-| %ps%     | `stage-command`   | A comma-separated list of the names all players considered to be in the fight (by proximity). |
+| %ps%     | `stage-command`   | A comma-separated list of the names of all players considered to be in the fight (by proximity). |
 | %p%      | `player-commmand` | The name of the one player affected by the player-command. |
 | %pc%     | `player-commmand` | The player's coordinates - x y z - as integers, separated by spaces. |
 | %pc.%    | `player-commmand` | The player's coordinates - x y z - as floating point numbers to three decimal places, separated by spaces. |
