@@ -28,6 +28,7 @@ import org.bukkit.boss.DragonBattle.RespawnPhase;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Creature;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
@@ -1368,6 +1369,42 @@ public class FightState implements Listener {
 
     // ------------------------------------------------------------------------
     /**
+     * Spawn the bosses for the specified stage and show titles to nearby
+     * players.
+     *
+     * This method holds code common to the "/df spawn <number>" command and
+     * {@link #startStage(CommandSender, int, Location)}.
+     *
+     * @param stage             the stage (from 1 to 11), but note that the
+     *                          dragon is already assumed to be spawned in the
+     *                          case of stage 11 and is not spawned in.
+     * @param bossSpawnLocation the location where the bosses are spawned.
+     */
+    public static void spawnStage(Stage stage, Location bossSpawnLocation) {
+        DropResults results = new DropResults();
+        if (stage.getStageNumber() >= 1 && stage.getStageNumber() <= 10) {
+            DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
+            if (dropSet != null) {
+                dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
+            }
+            log("Bosses are spawned.");
+        }
+
+        // Show the title.
+        ArrayList<Player> nearby = getNearbyPlayers();
+        log(nearby.size() + " players nearby.");
+        stage.announce(nearby);
+
+        // Bosses target random players.
+        for (LivingEntity mob : results.getMobs()) {
+            if (mob instanceof Creature) {
+                ((Creature) mob).setTarget(nearby.get(Util.randomInt(nearby.size())));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Return true if the specified location is that of a bedrock block where
      * you would place an end crystal to spawn the dragon.
      *
@@ -1524,16 +1561,12 @@ public class FightState implements Listener {
         Stage stage = DragonFight.CONFIG.getStage(getStageNumber());
         log("Beginning stage: " + getStageNumber());
 
-        // Spawn boss or bosses. Only valid in stages 1 to 10.
         DragonFight.CONFIG.TOTAL_BOSS_MAX_HEALTH = 0;
-        if (getStageNumber() >= 1 && getStageNumber() <= 10) {
-            DropResults results = new DropResults();
-            DropSet dropSet = BeastMaster.LOOTS.getDropSet(stage.getDropSetId());
-            if (dropSet != null) {
-                dropSet.generateRandomDrops(results, "DragonFight stage " + stage, null, bossSpawnLocation, true);
-            }
-            log("Mobs are spawned.");
-        } else {
+
+        // Spawn bosses in case of stage 1 through 10. And show titles.
+        spawnStage(stage, bossSpawnLocation);
+
+        if (stageNumber == 11) {
             // Stage 11. The dragon was set invulnerable in stage 1.
             DragonBattle battle = DragonUtil.getFightWorld().getEnderDragonBattle();
             EnderDragon dragon = battle.getEnderDragon();
@@ -1542,11 +1575,6 @@ public class FightState implements Listener {
             }
             log("Dragon is now vulnerable.");
         }
-
-        // Show the title.
-        Set<Player> nearby = getNearbyPlayers();
-        log(nearby.size() + " players nearby.");
-        stage.announce(nearby);
     }
 
     // ------------------------------------------------------------------------
@@ -1620,11 +1648,11 @@ public class FightState implements Listener {
      *
      * @return nearby players.
      */
-    protected Set<Player> getNearbyPlayers() {
+    protected static ArrayList<Player> getNearbyPlayers() {
         World world = DragonUtil.getFightWorld();
         return world.getPlayers().stream()
             .filter(p -> DragonUtil.getMagnitude2D(p.getLocation()) < NEARBY_RADIUS)
-            .collect(Collectors.toSet());
+            .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // ------------------------------------------------------------------------

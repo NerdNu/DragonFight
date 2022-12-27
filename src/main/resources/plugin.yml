@@ -40,6 +40,7 @@ commands:
       §5/<command> stop§f - Stop the current fight.
       §5/<command> next§f - Kill the current boss, skipping to the next stage.
       §5/<command> stage <number>§f - Skip forward to the specified stage, from 0 to 11 (dragon only).
+      §5/<command> spawn <number>§f - Spawn the bosses from stage 1 through 10 on the block where you are looking.
       §5/<command> owner <player>§f - Set the owner of the current fight.
       §5/<command> unclaimed§f - List players with unclaimed prizes.
       §5/<command> list§f - List all 10 stage titles and subtitles.

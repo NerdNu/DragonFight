@@ -6,17 +6,21 @@ import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.util.RayTraceResult;
 
 import nu.nerd.beastmaster.BeastMaster;
 import nu.nerd.beastmaster.commands.Commands;
 import nu.nerd.beastmaster.commands.ExecutorBase;
 import nu.nerd.df.DragonFight;
 import nu.nerd.df.DragonUtil;
+import nu.nerd.df.FightState;
 import nu.nerd.df.Stage;
 
 // ----------------------------------------------------------------------------
@@ -30,7 +34,7 @@ public class DFExecutor extends ExecutorBase {
      */
     public DFExecutor() {
         super("df", "help",
-              "info", "stop", "next", "stage", "owner", "unclaimed",
+              "info", "stop", "next", "stage", "spawn", "owner", "unclaimed",
               "list", "swap", "move", "config");
     }
 
@@ -63,19 +67,51 @@ public class DFExecutor extends ExecutorBase {
         if (args.length >= 1 && args[0].equalsIgnoreCase("stage")) {
             if (args.length != 2) {
                 sender.sendMessage(ChatColor.RED + "Usage: /df stage <number>");
-                sender.sendMessage(ChatColor.RED + "Skip forward to the specified stage, from 0 to 11 (dragon only).");
+                sender.sendMessage(ChatColor.RED + "Skip forward to the specified stage, from 0 to 11 (dragon only). Stage 0 stops the fight.");
                 return true;
             }
             String numberArg = args[1];
             Integer stageNumber = Commands.parseNumber(numberArg, Commands::parseInt,
                                                        n -> n >= 0 && n <= 11,
-                                                       () -> sender.sendMessage(ChatColor.RED + "The stage number must be an integer from 1 to 11."),
+                                                       () -> sender.sendMessage(ChatColor.RED + "The stage number must be an integer from 0 to 11."),
                                                        null);
-            if (stageNumber == null) {
+            if (stageNumber != null) {
+                DragonFight.FIGHT.cmdSkipToStage(sender, stageNumber);
+            }
+
+            return true;
+        }
+
+        if (args.length >= 1 && args[0].equalsIgnoreCase("spawn")) {
+            if (args.length != 2) {
+                sender.sendMessage(ChatColor.RED + "Usage: /df spawn <number>");
+                sender.sendMessage(ChatColor.RED + "Spawn the bosses from stage 1 through 10 on the block where you are looking.");
                 return true;
             }
 
-            DragonFight.FIGHT.cmdSkipToStage(sender, stageNumber);
+            if (!isInGame(sender)) {
+                return true;
+            }
+            Player player = (Player) sender;
+
+            RayTraceResult result = player.rayTraceBlocks(64);
+            if (result == null) {
+                sender.sendMessage(ChatColor.RED + "Look at the block where you want the bosses to spawn!");
+                return true;
+            }
+            Location spawnLocation = result.getHitBlock().getLocation().add(0, 1, 0);
+
+            String numberArg = args[1];
+            Integer stageNumber = Commands.parseNumber(numberArg, Commands::parseInt,
+                                                       n -> n >= 1 && n <= 10,
+                                                       () -> sender.sendMessage(ChatColor.RED + "The stage number must be an integer from 1 to 10."),
+                                                       null);
+
+            if (stageNumber != null) {
+                Stage stage = DragonFight.CONFIG.getStage(stageNumber);
+                FightState.spawnStage(stage, spawnLocation);
+            }
+
             return true;
         }
 

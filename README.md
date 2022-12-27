@@ -189,7 +189,11 @@ There is currently one administrative command:
 
  * `/df next` - Kill the current boss, skipping to the next stage.
 
- * `/df stage <number>` - Skip forward to the specified stage, from 0 to 11 (dragon only).
+ * `/df stage <number>` - Skip forward to the specified stage, from 0 to 11 (dragon only). Stage 0 stops the fight.
+
+ * `/df spawn <number>` - Spawn the bosses from stage 1 through 10 on the block where you are looking.
+   This command is intended to be used during development of a DragonFight configuration, rather than during
+   an ongoing fight.
 
  * `/df owner <player>` - Set the owner of the current fight.
 
