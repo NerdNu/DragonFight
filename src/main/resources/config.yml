@@ -12,56 +12,78 @@ state:
 stages:
   '1':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '2':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '3':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '4':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '5':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '6':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '7':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '8':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '9':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '10':
     barcolor: WHITE
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: ''
     message: ''
+    player-command: ''
+    stage-command: ''
   '11':
     barcolor: PINK
-    title: '&5Stage {}'
+    title: '&5Stage %sn%'
     subtitle: '&dDefeat the dragon.'
     message: ''
+    player-command: ''
+    stage-command: ''

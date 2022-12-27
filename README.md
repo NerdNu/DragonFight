@@ -16,9 +16,8 @@ The dragon is also invulnerable until all 10 stages have been cleared. In the
 11th and final stage of the fight, the player must defeat the dragon.
 
 The DragonFight plugin relies on new mob properties added in BeastMaster
-v2.13.0. At the time of writing, those properties are described in the
-[release notes for that version of BeastMaster](https://github.com/NerdNu/BeastMaster/releases/tag/v2.13.0), 
-but are not yet documented on the BeastMaster wiki.
+v2.13.0. Consult the BeastMaster wiki for a detailed description of all
+[mob properties](https://github.com/NerdNu/BeastMaster/wiki/Mobs#mob-property-reference).
 
 In the current version, score-keeping is not implemented. In the completed
 plugin, team and individual completion times will be recorded for all 11 stages
@@ -209,12 +208,73 @@ There is currently one administrative command:
  * `/df config <stage> barcolor <color>` - Configure stage bar color.
    * Note that Minecraft only allows [7 boss bar colors](https://hub.spigotmc.org/javadocs/spigot/org/bukkit/boss/BarColor.html),
      `BLUE`, `GREEN`, `PINK`, `PURPLE`, `RED`, `WHITE` and `YELLOW`.
- * `/df config <stage> title <text>` - Configure stage title.
- * `/df config <stage> subtitle <text>` - Configure stage subtitle.
- * `/df config <stage> message <text>` - Configure stage message.
-   * Titles, subtitles and messages accept `&c`-style [formatting codes](https://minecraft.gamepedia.com/Formatting_codes#Color_codes).
+ * `/df config <stage> title <text>` - Configure stage title. `%sn%` can be substituted (see below).
+ * `/df config <stage> subtitle <text>` - Configure stage subtitle. `%sn%` can be substituted (see below).
+ * `/df config <stage> message <text>` - Configure stage message. `%sn%` can be substituted (see below).
+ * `/df config <stage> player-command <text>` - Configure the per-player command sent to each player in the fight when it begins.
+   The command is run with full permissions. Many variables can be substituted into the command (see below).
+ * `/df config <stage> stage-command <text>` - Configure the command run once at the start of the fight, after per-player commands.
+   The command is run with full permissions. Many variables can be substituted into the command (see below).
 
-There is also a technical administrator command:
+ > *Note that if you are configuring commands that are CommandHelper aliases, they must be run
+ > using `/runalias <your-command-here>`. For vanilla Minecraft commands and plugin commands,
+ > drop the `/runalias`. Regardless of the type of command, the leading `/` can be omitted.*
+
+
+### Stage Text Substitution
+
+Titles, subtitles and messages and commands accept `&c`-style [formatting codes](https://minecraft.gamepedia.com/Formatting_codes#Color_codes).
+They are also subject to variable substitution as tabulated below.
+
+| Variable | Applied To        | Substitution Text |
+| :---     | :---              | :--- |
+| %%       | all text          | The single character '%'. |
+| %sn%     | all text          | The stage number, 1 to 11. |
+| %st%     | all commands      | The stage title, after substitution of `%sn%`. |
+| %ss%     | all commands      | The stage subtitle, after substitution of `%sn%`. |
+| %sm%     | all commands      | The stage message, after substitution of `%sn%`. |
+| %o%      | all commands      | The name of the player who "owns" the fight (placed the final end crystal). |
+| %w%      | all commands      | The name of the world where the fight is taking place (probably always `world_the_end`). |
+| %bc%     | all commands      | The integer coordinates - x y z - of the location where the bosses spawn. |
+| %bc.%    | all commands      | The floating point coordinates - x y z - of the location where the bosses spawn, to three decimal places, separated by spaces. |
+| %bx%     | all commands      | The integer X coordinate of the spawn location of the bosses. |
+| %by%     | all commmands     | The integer Y coordinate of the spawn location of the bosses. |
+| %bz%     | all commmands     | The integer Z coordinate of the spawn location of the bosses. |
+| %bx.%    | all commmands     | The floating point X coordinate (to three decimal places) of the spawn location of the bosses. |
+| %by.%    | all commmands     | The floating point Y coordinate (to three decimal places) of the spawn location of the bosses. |
+| %bz.%    | all commmands     | The floating point Z coordinate (to three decimal places) of the spawn location of the bosses. |
+| %ps%     | `stage-command`   | A comma-separated list of the names all players considered to be in the fight (by proximity). |
+| %p%      | `player-commmand` | The name of the one player affected by the player-command. |
+| %pc%     | `player-commmand` | The player's coordinates - x y z - as integers, separated by spaces. |
+| %pc.%    | `player-commmand` | The player's coordinates - x y z - as floating point numbers to three decimal places, separated by spaces. |
+| %px%     | `player-commmand` | The player's X coordinate as an integer. |
+| %py%     | `player-commmand` | The player's Y coordinate as an integer. |
+| %pz%     | `player-commmand` | The player's Z coordinate as an integer. |
+| %px.%    | `player-commmand` | The player's X coordinate as a floating point number to three decimal places. |
+| %py.%    | `player-commmand` | The player's Y coordinate as a floating point number to three decimal places. |
+| %pz.%    | `player-commmand` | The player's Z coordinate as a floating point number to three decimal places. |
+
+Examples:
+
+ * Imagine you have a CommandHelper command `/link $selector $url $colour $` that formats a clickable link
+   to all players matching the selector, with the URL as hover text, a specified colour and the remainder
+   of the command line devoted to the text displayed in chat. You configure fight stage 1 to send that
+   link to every player in the fight with:
+   ```
+   /df config 1 player-command runalias link %p% https://www.youtube.com/watch?v=mX7Dq8q6zoQ green Wait What?
+   ```
+
+ * Imagine you have a CommandHelper command `/strike-wxyz $world $x $y $z` that strikes harmless lightning
+   at the specified x, y, and z coordinates in `$world`. You can use that to show a lightning strike where
+   the stage bosses spawn with:
+   ```
+   /df config 1 stage-command runalias strike-wxyz %w% %bc.%
+   ```
+
+
+### Technical Administrator Commands
+
+For staff with access to the host and the ability to edit the configuration file directly, there is a technical administrator command:
 
  * `/dragonfight reload` - reload the plugin configuration.
 

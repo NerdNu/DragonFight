@@ -289,6 +289,10 @@ public class DFExecutor extends ExecutorBase {
                 sender.sendMessage(ChatColor.DARK_PURPLE + "subtitle (formatted): " + ChatColor.WHITE + stage.format(stage.getSubtitle()));
                 sender.sendMessage(ChatColor.DARK_PURPLE + "message (unformatted): " + ChatColor.WHITE + stage.getMessage());
                 sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + ChatColor.WHITE + stage.format(stage.getMessage()));
+                sender.sendMessage(ChatColor.DARK_PURPLE + "player-command (unformatted): " + ChatColor.WHITE + stage.getPlayerCommand());
+                sender.sendMessage(ChatColor.DARK_PURPLE + "player-command (formatted): " + ChatColor.WHITE + stage.format(stage.getPlayerCommand()));
+                sender.sendMessage(ChatColor.DARK_PURPLE + "stage-command (unformatted): " + ChatColor.WHITE + stage.getStageCommand());
+                sender.sendMessage(ChatColor.DARK_PURPLE + "stage-command (formatted): " + ChatColor.WHITE + stage.format(stage.getStageCommand()));
                 return true;
             } else if (args.length >= 3) {
                 String propertyArg = args[2];
@@ -343,6 +347,18 @@ public class DFExecutor extends ExecutorBase {
                         sender.sendMessage(ChatColor.DARK_PURPLE + "message (unformatted): " + ChatColor.WHITE + stage.getMessage());
                         sender.sendMessage(ChatColor.DARK_PURPLE + "message (formatted): " + ChatColor.WHITE + stage.format(stage.getMessage()));
 
+                    } else if (propertyArg.equalsIgnoreCase("player-command")) {
+                        stage.setPlayerCommand(text);
+                        DragonFight.CONFIG.save();
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "player-command (unformatted): " + ChatColor.WHITE + stage.getPlayerCommand());
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "player-command (formatted): " + ChatColor.WHITE + stage.format(stage.getPlayerCommand()));
+
+                    } else if (propertyArg.equalsIgnoreCase("stage-command")) {
+                        stage.setStageCommand(text);
+                        DragonFight.CONFIG.save();
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "stage-command (unformatted): " + ChatColor.WHITE + stage.getStageCommand());
+                        sender.sendMessage(ChatColor.DARK_PURPLE + "stage-command (formatted): " + ChatColor.WHITE + stage.format(stage.getStageCommand()));
+
                     } else {
                         configUsage(sender);
                     }
@@ -368,7 +384,10 @@ public class DFExecutor extends ExecutorBase {
         sender.sendMessage(ChatColor.RED + "  /df config <stage> title <text>");
         sender.sendMessage(ChatColor.RED + "  /df config <stage> subtitle <text>");
         sender.sendMessage(ChatColor.RED + "  /df config <stage> message <text>");
-        sender.sendMessage(ChatColor.RED + "{} in <text> is replaced by the stage number.");
+        sender.sendMessage(ChatColor.RED + "  /df config <stage> player-command <text>");
+        sender.sendMessage(ChatColor.RED + "  /df config <stage> stage-command <text>");
+        sender.sendMessage(ChatColor.RED + "%sn% in <text> is replaced by the stage number.");
+        sender.sendMessage(ChatColor.RED + "Other text substritutions are detailed at https://github.com/NerdNu/DragonFight.");
     }
 
     // ------------------------------------------------------------------------

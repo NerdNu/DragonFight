@@ -1,8 +1,13 @@
 package nu.nerd.df;
 
 import java.util.Collection;
+import java.util.Map;
+import java.util.function.Supplier;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.boss.BarColor;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -19,7 +24,7 @@ public class Stage {
     /**
      * Return the ID of the loot table that defines the boss mob(s) for the
      * specified stage.
-     * 
+     *
      * @param stageNumber the stage number from 1 to 10.
      * @returns the DropSet ID.
      * @throws IllegalArgumentException for an invalid stage number.
@@ -34,11 +39,11 @@ public class Stage {
     // ------------------------------------------------------------------------
     /**
      * Swap the contents of two stages.
-     * 
+     *
      * The Stage instances are intended to stay at the same indicies, so the
      * stage number doesn't change. Only the properties that determine the
      * appearance of the stage, and the contents of the DropSets swap.
-     * 
+     *
      * @param a a stage.
      * @param b another stage.
      */
@@ -75,12 +80,20 @@ public class Stage {
         String tmpMessage = a._message;
         a._message = b._message;
         b._message = tmpMessage;
+
+        String tmpCommand = a._stageCommand;
+        a._stageCommand = b._stageCommand;
+        b._stageCommand = tmpCommand;
+
+        String tmpPlayerCommand = a._playerCommand;
+        a._playerCommand = b._playerCommand;
+        b._playerCommand = tmpPlayerCommand;
     }
 
     // ------------------------------------------------------------------------
     /**
      * Constructor.
-     * 
+     *
      * @param stageNumber the stage number from 1 to 10.
      */
     public Stage(int stageNumber) {
@@ -91,7 +104,7 @@ public class Stage {
     // ------------------------------------------------------------------------
     /**
      * Return the number of this stage.
-     * 
+     *
      * @return the number of this stage.
      */
     public int getStageNumber() {
@@ -101,7 +114,7 @@ public class Stage {
     // ------------------------------------------------------------------------
     /**
      * Return the DropSet ID that defines the boss mob(s) for this stage.
-     * 
+     *
      * @return the DropSet ID that defines the boss mob(s) for this stage.
      */
     public String getDropSetId() {
@@ -110,11 +123,14 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Show the stage title to the specified players.
-     * 
+     * Show the stage title and messages to the specified players, and run
+     * commands.
+     *
      * @param players the players that should see the title.
+     * @param owner   the fight owner, who may be offline and may be null.
+     * @param bLoc    the spawn location of the stage bosses.
      */
-    public void announce(Collection<Player> players) {
+    public void announce(Collection<Player> players, OfflinePlayer owner, Location bLoc) {
         for (Player player : players) {
             // Subtitles are not visible if there is no title.
             if (!_title.isEmpty()) {
@@ -123,13 +139,22 @@ public class Stage {
             if (!_message.isEmpty()) {
                 player.sendMessage(format(_message));
             }
+            if (!_playerCommand.isEmpty()) {
+                Map<String, Supplier<String>> vars = Strings.getPerPlayerVariables(player, owner, bLoc, this);
+                runConsoleCommand(Strings.translate(Strings.substitute(_playerCommand, vars)));
+            }
+        }
+
+        if (!_stageCommand.isEmpty()) {
+            Map<String, Supplier<String>> vars = Strings.getAllPlayerVariables(players, owner, bLoc, this);
+            runConsoleCommand(Strings.translate(Strings.substitute(_stageCommand, vars)));
         }
     }
 
     // ------------------------------------------------------------------------
     /**
      * Load this Stage from the specified configuration section.
-     * 
+     *
      * @param section the section.
      */
     public void load(ConfigurationSection section) {
@@ -139,15 +164,17 @@ public class Stage {
         } catch (IllegalArgumentException ex) {
             _barColor = BarColor.WHITE;
         }
-        _title = section.getString("title", "Stage {}");
-        _subtitle = section.getString("subtitle", "Stage {} subtitle");
+        _title = section.getString("title", "Stage %sn%");
+        _subtitle = section.getString("subtitle", "Stage %sn% subtitle");
         _message = section.getString("message", "");
+        _playerCommand = section.getString("player-command", "");
+        _stageCommand = section.getString("stage-command", "");
     }
 
     // ------------------------------------------------------------------------
     /**
      * Save this Stage to the specified configuration section.
-     * 
+     *
      * @param section the section.
      */
     public void save(ConfigurationSection section) {
@@ -155,12 +182,14 @@ public class Stage {
         section.set("title", _title);
         section.set("subtitle", _subtitle);
         section.set("message", _message);
+        section.set("player-command", _playerCommand);
+        section.set("stage-command", _stageCommand);
     }
 
     // ------------------------------------------------------------------------
     /**
      * Set the colour of the boss bar.
-     * 
+     *
      * @param barColor the BarColor.
      */
     public void setBarColor(BarColor barColor) {
@@ -170,7 +199,7 @@ public class Stage {
     // ------------------------------------------------------------------------
     /**
      * Return the colour of the boss bar.
-     * 
+     *
      * @return the colour of the boss bar.
      */
     public BarColor getBarColor() {
@@ -179,8 +208,8 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Set the raw title of this stage.
-     * 
+     * Set the unformatted title of this stage.
+     *
      * @param title the title.
      */
     public void setTitle(String title) {
@@ -189,9 +218,9 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Return the raw title of this stage.
-     * 
-     * @return the raw title of this stage.
+     * Return the unformatted title of this stage.
+     *
+     * @return the unformatted title of this stage.
      */
     public String getTitle() {
         return _title;
@@ -199,8 +228,8 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Set the raw subtitle of this stage.
-     * 
+     * Set the unformatted subtitle of this stage.
+     *
      * @param subtitle the subtitle.
      */
     public void setSubtitle(String subtitle) {
@@ -209,9 +238,9 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Return the raw subtitle of this stage.
-     * 
-     * @return the raw subtitle of this stage.
+     * Return the unformatted subtitle of this stage.
+     *
+     * @return the unformatted subtitle of this stage.
      */
     public String getSubtitle() {
         return _subtitle;
@@ -219,8 +248,8 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Set the raw message of this stage.
-     * 
+     * Set the unformatted message of this stage.
+     *
      * @param message the message.
      */
     public void setMessage(String message) {
@@ -229,9 +258,9 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
-     * Return the raw message of this stage.
-     * 
-     * @return the raw message of this stage.
+     * Return the unformatted message of this stage.
+     *
+     * @return the unformatted message of this stage.
      */
     public String getMessage() {
         return _message;
@@ -239,11 +268,72 @@ public class Stage {
 
     // ------------------------------------------------------------------------
     /**
+     * Set the per-player command of this stage, run for each online player in
+     * the fight.
+     *
+     * The leading '/' character will be removed.
+     *
+     * @param command the command.
+     */
+    public void setPlayerCommand(String playerCommand) {
+        _playerCommand = playerCommand.startsWith("/") ? playerCommand.substring(1) : playerCommand;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return the unformatted per-player command of this stage.
+     *
+     * @return the unformatted per-player command of this stage.
+     */
+    public String getPlayerCommand() {
+        return _playerCommand;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Set the command of this stage, run once for the fight stage.
+     *
+     * The leading '/' character will be removed.
+     *
+     * @param stageCommand the command.
+     */
+    public void setStageCommand(String stageCommand) {
+        _stageCommand = stageCommand.startsWith("/") ? stageCommand.substring(1) : stageCommand;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Return the unformatted command of this stage.
+     *
+     * @return the unformatted command of this stage.
+     */
+    public String getStageCommand() {
+        return _stageCommand;
+    }
+
+    // ------------------------------------------------------------------------
+    /**
      * Format a title, subtitle or message string for this stage by translating
-     * colour codes and replacing "{}" with the current stage number.
+     * colour codes and replacing "%sn%" with the current stage number.
      */
     public String format(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text.replaceAll("\\{\\}", Integer.toString(_stageNumber)));
+        return ChatColor.translateAlternateColorCodes('&', text.replaceAll("%sn%", Integer.toString(_stageNumber)));
+    }
+
+    // ------------------------------------------------------------------------
+    /**
+     * Run the specified command as the console sender.
+     *
+     * @param formattedCommand the command, after colour and variable
+     *                         substitutions.
+     */
+    public static void runConsoleCommand(String formattedCommand) {
+        try {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), formattedCommand);
+        } catch (Exception ex) {
+            String message = ex.getClass().getName() + ": \"" + ex.getMessage() + "\" running \"" + formattedCommand + "\"";
+            DragonFight.PLUGIN.getLogger().severe(message);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -260,15 +350,26 @@ public class Stage {
     /**
      * The stage title text.
      */
-    protected String _title = "Stage {}";
+    protected String _title = "Stage %sn%";
 
     /**
      * The stage subtitle text.
      */
-    protected String _subtitle = "Stage {} subtitle";
+    protected String _subtitle = "Stage %sn% subtitle";
 
     /**
      * Message sent to players.
      */
     protected String _message = "";
+
+    /**
+     * Command sent to each player individually.
+     */
+    protected String _playerCommand = "";
+
+    /**
+     * Command sent to all players collectively.
+     */
+    protected String _stageCommand = "";
+
 } // class Stage

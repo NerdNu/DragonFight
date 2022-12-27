@@ -1390,10 +1390,11 @@ public class FightState implements Listener {
             log("Bosses are spawned.");
         }
 
-        // Show the title.
+        // Show the titles, messages and commands.
         ArrayList<Player> nearby = getNearbyPlayers();
         log(nearby.size() + " players nearby.");
-        stage.announce(nearby);
+        OfflinePlayer owner = (DragonFight.CONFIG.FIGHT_OWNER != null) ? Bukkit.getOfflinePlayer(DragonFight.CONFIG.FIGHT_OWNER) : null;
+        stage.announce(nearby, owner, bossSpawnLocation);
 
         // Bosses target random players.
         for (LivingEntity mob : results.getMobs()) {
