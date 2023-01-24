@@ -1478,6 +1478,15 @@ public class FightState implements Listener {
             return;
         }
 
+        // I have observed that sometimes the config has stage-number: 0 and
+        // new-stage-number: 1, and there are no crystals. In that case, getting
+        // the next crystal to remove by _crystals.iterator() fails and there
+        // is an exception. Avoid that.
+        // TODO: work out why we get into this inconsistent state and fix it.
+        if (_crystals.isEmpty()) {
+            return;
+        }
+
         // From here forward, getNewStageNumber() is between 1 and 10.
         // Remove a random crystal. Random order due to hashing UUID.
         EnderCrystal replacedCrystal = _crystals.iterator().next();
