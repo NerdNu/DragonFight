@@ -1599,31 +1599,41 @@ public class FightState implements Listener {
      */
     protected static Location getBossSpawnLocation() {
         World fightWorld = DragonUtil.getFightWorld();
-        double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
-        double angle = Util.random() * 2.0 * Math.PI;
-        double x = range * Math.cos(angle);
-        double z = range * Math.sin(angle);
         float yaw = 360 * (float) Math.random();
-        Location startLoc = new Location(fightWorld, x, ORIGIN_Y, z, yaw, 0f);
 
-        // Find local highest block to stand on.
-        Location loc = null;
-        for (int i = 5; i >= -5; --i) {
-            loc = startLoc.clone().add(0, i, 0);
-            if (!loc.getBlock().isPassable()) {
-                break;
-            }
-        }
+        // Try to find a valid spawn location.
+        // Retry up to a few times on failures.
+        for (int attempt = 1; attempt <= BOSS_SPAWN_MAX_RETRIES; attempt++) {
+            double range = Util.random(BOSS_SPAWN_RADIUS_MIN, BOSS_SPAWN_RADIUS_MAX);
+            double angle = Util.random() * 2.0 * Math.PI;
+            double x = range * Math.cos(angle);
+            double z = range * Math.sin(angle);
+            Location startLoc = new Location(fightWorld, x, ORIGIN_Y, z, yaw, 0f);
 
-        // Now go up to find space.
-        for (int i = 1; i < 10; ++i) {
-            loc.add(0, 1, 0);
-            if (Util.isPassable3x3x3(loc)) {
-                return loc;
+            // Find local highest block to stand on.
+            Location loc = null;
+            for (int i = 5; i >= -5; --i) {
+                loc = startLoc.clone().add(0, i, 0);
+                if (!loc.getBlock().isPassable()) {
+                    break;
+                }
             }
+
+            // Now go up to find space.
+            for (int i = 1; i < 10; ++i) {
+                loc.add(0, 1, 0);
+                if (Util.isPassable3x3x3(loc)) {
+                    return loc;
+                }
+            }
+
+            // No valid space found at these coordinates; Log and retry.
+            log(String.format("Failed to find space to spawn bosses at x=%.2f, z=%.2f", x, z));
         }
 
         // If all else fails. Plonk it on the portal pillar.
+        // TODO Make the fallback spawn location configurable
+        log("No valid locations found. Defaulting to the fallback spawn location.");
         return new Location(fightWorld, 0.5, ORIGIN_Y + 1, 0.5, yaw, 0f);
     }
 
@@ -1891,6 +1901,11 @@ public class FightState implements Listener {
      * Maximum radius around the origin where bosses spawn.
      */
     private static final double BOSS_SPAWN_RADIUS_MAX = 30.0;
+
+    /**
+     * Maximum number of times to try to find a valid boss spawn location.
+     */
+    private static final int BOSS_SPAWN_MAX_RETRIES = 5;
 
     /**
      * Starting Y coordinate to search for a spawnable location for the boss.
